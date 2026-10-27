@@ -55,7 +55,7 @@ echo.
 echo [*] [5/5] Packaging Project_XO_Android.zip...
 copy /y "dist\ProjectXO.apk" "android\" >nul
 copy /y "app_icon.png" "android\" >nul
-python -c "import shutil, os, zipfile; base = r'C:\Users\bbara\.gemini\antigravity\scratch\project_xo'; zip_out = os.path.join(base, 'dist', 'Project_XO_Android.zip'); z = zipfile.ZipFile(zip_out, 'w', zipfile.ZIP_DEFLATED); [z.write(os.path.join(base, 'android', f), f) for f in ['ProjectXO.apk', 'app_icon.png', 'README_ANDROID.md', 'install_termux.sh', 'xo_watchdog.sh']]; z.close(); print('[+] Android Zip packaged successfully.')"
+python -c "import shutil, os, zipfile; base = r'C:\Users\bbara\.gemini\antigravity\scratch\project_xo'; zip_out = os.path.join(base, 'dist', 'Project_XO_Android.zip'); z = zipfile.ZipFile(zip_out, 'w', zipfile.ZIP_DEFLATED); [z.write(os.path.join(base, 'android', f), f) for f in ['ProjectXO.apk', 'app_icon.png', 'README_ANDROID.md']]; z.close(); print('[+] Android Zip packaged successfully.')"
 if %errorlevel% neq 0 (
     echo [!] Failed to package Android zip
     exit /b %errorlevel%

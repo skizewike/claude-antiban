@@ -48,7 +48,7 @@ if not exist ".git" (
 
 echo [*] Staging all files...
 git add .
-git commit -m "Release: Project XO v4.1 Luxury BZ/XO Edition // BOGDAN ZHUKOV"
+git commit -m "Release v5.0.0: Claude Anti-Ban Barrier // Bogdan Zhukov"
 git branch -M main
 
 echo.

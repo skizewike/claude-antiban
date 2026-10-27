@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>PROJECT XO // BOGDAN ZHUKOV</title>
+    <title>Claude Anti-Ban Barrier — Bogdan Zhukov</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         body {
-            background-color: #0d0f14;
-            color: #f3f4f6;
+            background-color: #121316;
+            color: #f4f4f5;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             overflow-x: hidden;
             display: flex;
@@ -16,37 +16,33 @@
             min-height: 100vh;
         }
 
-        /* Header */
         .header {
-            background: #090b10;
-            padding: 12px 16px;
-            border-bottom: 1px solid #1a2234;
+            background: #18191e;
+            padding: 14px 16px;
+            border-bottom: 1px solid #282932;
             text-align: center;
         }
         .header-title {
-            font-size: 14px;
-            font-weight: 800;
-            color: #d97757;
-            letter-spacing: 1px;
-            text-shadow: 0 0 10px rgba(217, 119, 87, 0.4);
+            font-size: 13.5px;
+            font-weight: 700;
+            color: #cc785c;
+            letter-spacing: 0.5px;
         }
         .header-sub {
-            font-size: 11px;
-            color: #94a3b8;
-            margin-top: 2px;
-            font-weight: 600;
+            font-size: 10.5px;
+            color: #a1a1aa;
+            margin-top: 3px;
         }
 
-        /* Canvas Animation Container */
         .canvas-container {
             position: relative;
             width: 100%;
-            height: 240px;
-            background: #0d0f14;
+            height: 220px;
+            background: #141519;
             display: flex;
             justify-content: center;
             align-items: center;
-            border-bottom: 1px solid #1a2336;
+            border-bottom: 1px solid #282932;
         }
         canvas {
             width: 100%;
@@ -54,7 +50,6 @@
             display: block;
         }
 
-        /* Content */
         .content {
             padding: 14px;
             flex: 1;
@@ -64,20 +59,19 @@
         }
 
         .section-label {
-            font-size: 11px;
+            font-size: 10.5px;
             font-weight: 700;
-            color: #94a3b8;
+            color: #a1a1aa;
             text-transform: uppercase;
-            letter-spacing: 0.8px;
+            letter-spacing: 0.6px;
             margin-top: 4px;
         }
 
-        /* Smart Android Features Card */
         .smart-panel {
-            background: #141824;
-            border: 1px solid #243048;
-            border-radius: 10px;
-            padding: 14px;
+            background: #1a1b20;
+            border: 1px solid #2c2d35;
+            border-radius: 8px;
+            padding: 12px 14px;
             display: flex;
             flex-direction: column;
             gap: 10px;
@@ -88,33 +82,34 @@
             align-items: center;
         }
         .smart-text h4 {
-            font-size: 13px;
-            color: #f3f4f6;
+            font-size: 12.5px;
+            color: #f4f4f5;
             margin-bottom: 2px;
+            font-weight: 600;
         }
         .smart-text p {
             font-size: 11px;
-            color: #94a3b8;
+            color: #a1a1aa;
         }
         .toggle-btn {
-            background: #d97757;
-            color: #fff;
-            border: none;
-            padding: 8px 14px;
+            background: #2a2b34;
+            color: #cc785c;
+            border: 1px solid #3c3d48;
+            padding: 7px 12px;
             border-radius: 6px;
             font-size: 11px;
-            font-weight: 700;
+            font-weight: 600;
             cursor: pointer;
         }
         .toggle-btn.active {
-            background: #10b981;
-            color: #090b10;
+            background: #cc785c;
+            color: #ffffff;
+            border-color: #de8a6e;
         }
 
-        /* Diagnostic Cards */
         .card {
-            background: #131824;
-            border: 1px solid #1e2638;
+            background: #1a1b20;
+            border: 1px solid #2c2d35;
             border-radius: 8px;
             overflow: hidden;
             transition: all 0.2s ease;
@@ -126,104 +121,84 @@
             align-items: center;
             cursor: pointer;
         }
-        .card-header-left {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .card-icon { font-size: 14px; }
-        .card-title { font-size: 13px; font-weight: 600; color: #f1f5f9; }
+        .card-title { font-size: 12.5px; font-weight: 600; color: #f4f4f5; }
         .card-badge {
-            font-size: 11px;
-            font-weight: 700;
+            font-size: 10.5px;
+            font-weight: 600;
             padding: 3px 8px;
             border-radius: 4px;
         }
-        .badge-safe { background: #064e3b; color: #34d399; }
-        .badge-danger { background: #7f1d1d; color: #f87171; }
-        .badge-warn { background: #78350f; color: #fbbf24; }
-        .card-arrow {
-            font-size: 10px;
-            color: #64748b;
-            margin-left: 8px;
-            transition: transform 0.2s ease;
-        }
-        .card.expanded .card-arrow { transform: rotate(180deg); }
+        .badge-safe { background: #2b231f; color: #cc785c; border: 1px solid #43322b; }
+        .badge-danger { background: #331c1e; color: #f87171; border: 1px solid #4c2225; }
+        .badge-warn { background: #33261a; color: #fbbf24; border: 1px solid #4c3822; }
 
         .card-body {
             display: none;
             padding: 12px 14px;
-            background: #0f131c;
-            border-top: 1px solid #1a2234;
-            font-size: 11.5px;
+            background: #15161a;
+            border-top: 1px solid #282932;
+            font-size: 11px;
             line-height: 1.5;
-            color: #cbd5e1;
+            color: #a1a1aa;
         }
         .card.expanded .card-body { display: block; }
-        .card-action-btn {
-            margin-top: 8px;
-            padding: 6px 12px;
-            background: #1e293b;
-            color: #38bdf8;
-            border: 1px solid #334155;
+
+        .launch-status {
+            padding: 8px 12px;
             border-radius: 6px;
             font-size: 11px;
             font-weight: 600;
-            cursor: pointer;
-            display: inline-block;
+            text-align: center;
+            margin-top: 6px;
         }
+        .status-safe { background: #26211d; color: #cc785c; border: 1px solid #3d2f28; }
+        .status-danger { background: #2d1819; color: #f87171; border: 1px solid #482023; }
 
-        /* Action Buttons */
         .actions-area {
             display: flex;
             flex-direction: column;
             gap: 8px;
-            margin-top: 6px;
+            margin-top: 4px;
         }
-        .btn-launch {
-            background: #10b981;
-            color: #0b0e14;
+        .btn-launch-primary {
+            background: #cc785c;
+            color: #ffffff;
             border: none;
             border-radius: 8px;
             padding: 13px;
-            font-size: 13.5px;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            cursor: pointer;
-            box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);
-        }
-        .btn-launch:active { transform: scale(0.98); }
-        .btn-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-        }
-        .btn-secondary {
-            background: #1e293b;
-            color: #f1f5f9;
-            border: 1px solid #334155;
-            border-radius: 8px;
-            padding: 11px;
-            font-size: 11.5px;
+            font-size: 13px;
             font-weight: 600;
             text-align: center;
             cursor: pointer;
         }
+        .btn-launch-primary.blocked {
+            background: #2b181a;
+            color: #e06c75;
+            border: 1px solid #4a2125;
+        }
 
-        /* Live Log Box */
-        .log-box {
-            background: #080a0f;
-            border: 1px solid #1a2234;
+        .btn-secondary {
+            background: #24252e;
+            color: #f4f4f5;
+            border: 1px solid #363744;
             border-radius: 8px;
-            padding: 10px;
-            height: 90px;
+            padding: 11px;
+            font-size: 11.5px;
+            font-weight: 500;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        .log-box {
+            background: #0f1013;
+            border: 1px solid #24252e;
+            border-radius: 6px;
+            padding: 8px 10px;
+            height: 75px;
             overflow-y: auto;
             font-family: monospace;
-            font-size: 10px;
-            color: #94a3b8;
+            font-size: 9.5px;
+            color: #a1a1aa;
             line-height: 1.4;
         }
 
@@ -231,16 +206,16 @@
             padding: 12px;
             text-align: center;
             font-size: 10px;
-            color: #64748b;
-            border-top: 1px solid #1a2234;
-            background: #090b10;
+            color: #71717a;
+            border-top: 1px solid #24252e;
+            background: #18191e;
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="header-title">PROJECT XO // BOGDAN ZHUKOV</div>
-        <div class="header-sub">CLAUDE ZERO-LEAK GUARDIAN FOR ANDROID</div>
+        <div class="header-title">CLAUDE ANTI-BAN BARRIER</div>
+        <div class="header-sub">Автономный мобильный агент изоляции // Bogdan Zhukov</div>
     </div>
 
     <div class="canvas-container">
@@ -248,79 +223,61 @@
     </div>
 
     <div class="content">
-        <div class="section-label">Умный режим защиты Android</div>
+        <div class="section-label">Параметры фонового контроля</div>
         <div class="smart-panel">
             <div class="smart-row">
                 <div class="smart-text">
                     <h4>Показ поверх всех окон</h4>
-                    <p>Плавающий индикатор защиты при работе в Claude</p>
+                    <p>Плавающий статус защиты во время общения в Claude</p>
                 </div>
                 <button id="btnOverlay" class="toggle-btn" onclick="toggleOverlay()">Включить</button>
             </div>
             <div class="smart-row">
                 <div class="smart-text">
-                    <h4>Игнорировать оптимизацию батареи</h4>
-                    <p>Защита от остановки фонового процесса системой</p>
+                    <h4>Исключение из энергосбережения</h4>
+                    <p>Предотвращение остановки службы системой Doze mode</p>
                 </div>
                 <button class="toggle-btn" onclick="requestBatteryExemption()">Настроить</button>
             </div>
         </div>
 
-        <div class="section-label">Диагностика сети</div>
+        <div class="section-label">Диагностика шлюза</div>
         <div class="card" id="cardIp">
             <div class="card-header" onclick="toggleCard('cardIp')">
-                <div class="card-header-left">
-                    <span class="card-icon">🌐</span>
-                    <span class="card-title">Внешний IP & Геолокация</span>
-                </div>
-                <div>
-                    <span id="badgeIp" class="card-badge badge-warn">Проверка...</span>
-                    <span class="card-arrow">▼</span>
-                </div>
+                <span class="card-title">Внешний IPv4 и страна</span>
+                <span id="badgeIp" class="card-badge badge-warn">Проверка...</span>
             </div>
             <div class="card-body">
                 <div id="detailIp">Сканирование туннеля через Cloudflare...</div>
-                <div class="card-action-btn" onclick="runAudit()">Перепроверить</div>
             </div>
         </div>
 
-        <div class="card" id="cardApi">
-            <div class="card-header" onclick="toggleCard('cardApi')">
-                <div class="card-header-left">
-                    <span class="card-icon">☁️</span>
-                    <span class="card-title">Шлюз Cloudflare & Anthropic</span>
-                </div>
-                <div>
-                    <span id="badgeApi" class="card-badge badge-safe">TLS 1.3 OK</span>
-                    <span class="card-arrow">▼</span>
-                </div>
-            </div>
-            <div class="card-body">
-                <div>Прямой отклик api.anthropic.com:443. Протокол согласования TLS 1.3 активен.</div>
-                <div class="card-action-btn" onclick="runAudit()">Тест пинга</div>
-            </div>
+        <div class="section-label">Запуск приложений Claude</div>
+        <div id="launchStatus" class="launch-status status-danger">
+            Проверка соединения...
+        </div>
+
+        <div class="actions-area">
+            <button id="btnLaunchApp" class="btn-launch-primary blocked" onclick="launchClaudeApp()">
+                Запустить Claude Mobile [Заблокировано]
+            </button>
+            <button id="btnLaunchWeb" class="btn-secondary" onclick="launchClaudeWeb()">
+                Открыть claude.ai в браузере
+            </button>
+            <button class="btn-secondary" onclick="runAudit()">
+                Проверить соединение
+            </button>
         </div>
 
         <div class="section-label">Журнал событий</div>
         <div class="log-box" id="logBox">
-            [SYS] Project XO Android Engine v4.2 запущен.<br>
-            [WFP] Мониторинг интерфейсов активен.<br>
-            [DOH] Cloudflare DNS-over-HTTPS готов.
-        </div>
-
-        <div class="actions-area">
-            <button class="btn-launch" onclick="launchClaude()">
-                <span>🚀</span> ЗАПУСТИТЬ CLAUDE БЕЗОПАСНО
-            </button>
-            <div class="btn-row">
-                <button class="btn-secondary" onclick="runSimulation()">⚡ ТЕСТ ОБРЫВА</button>
-                <button class="btn-secondary" onclick="openVpnSettings()">⚙ НАСТРОЙКИ VPN</button>
-            </div>
+            [SYS] Мобильный агент защиты запущен.<br>
+            [DOH] Шифрование DNS-over-HTTPS активно.
         </div>
     </div>
 
     <div class="footer">
-        PROJECT XO v4.2 // BOGDAN ZHUKOV — ALL RIGHTS RESERVED
+        Claude Anti-Ban Barrier v5.0 — Bogdan Zhukov
     </div>
 
     <script>
@@ -328,10 +285,10 @@
         const ctx = canvas.getContext('2d');
         let width, height;
         let phase = 0;
-        let isProhibited = false;
+        let isSafe = false;
         let isOverlayEnabled = false;
-        let livePingMs = 24;
-        let alarmReason = "";
+        let livePingMs = 0;
+        let country = "";
 
         function log(msg) {
             const box = document.getElementById('logBox');
@@ -354,55 +311,56 @@
             ctx.clearRect(0, 0, width, height);
             const cx = width / 2;
             const cy = height / 2 - 10;
+            const pulse = Math.sin(phase) * 3;
 
-            if (!isProhibited) {
-                // Glow
-                const pulse = Math.sin(phase) * 6;
-                const gradGlow = ctx.createRadialGradient(cx, cy, 20, cx, cy, 110 + pulse);
-                gradGlow.addColorStop(0, 'rgba(217, 119, 87, 0.45)');
-                gradGlow.addColorStop(0.5, 'rgba(16, 185, 129, 0.25)');
+            if (isSafe) {
+                // Claude Terracotta Glow
+                const gradGlow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 95 + pulse);
+                gradGlow.addColorStop(0, 'rgba(204, 120, 92, 0.35)');
                 gradGlow.addColorStop(1, 'rgba(0,0,0,0)');
                 ctx.fillStyle = gradGlow;
                 ctx.beginPath();
-                ctx.arc(cx, cy, 110 + pulse, 0, Math.PI * 2);
+                ctx.arc(cx, cy, 95 + pulse, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Claude 14-lobed Sunburst
-                drawClaudeIcon(cx, cy, 48 + pulse * 0.4, '#d97757', '#c15f3c');
+                drawClaudeSunburst(cx, cy, 46 + pulse * 0.3, '#cc785c', '#a65538');
 
                 ctx.textAlign = 'center';
-                ctx.font = 'bold 12px sans-serif';
-                ctx.fillStyle = '#10b981';
-                ctx.fillText(`● CLAUDE ЗАЩИЩЕН // ${livePingMs} мс`, cx, cy + 74);
+                ctx.font = '600 12px sans-serif';
+                ctx.fillStyle = '#f4f4f5';
+                ctx.fillText(`Защита активна · ${country || 'Туннель VPN'}`, cx, cy + 72);
                 ctx.font = '10px sans-serif';
-                ctx.fillStyle = '#94a3b8';
-                ctx.fillText('ТАКТЫ ЯДРА: 0 мс ЗАДЕРЖКИ // WFP АКТИВЕН', cx, cy + 90);
+                ctx.fillStyle = '#a1a1aa';
+                ctx.fillText('Трафик изолирован · 0% утечек адреса', cx, cy + 88);
             } else {
-                // Emergency Alert
-                ctx.fillStyle = 'rgba(220, 38, 38, 0.25)';
+                // Rust Alert
+                const gradGlow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 90);
+                gradGlow.addColorStop(0, 'rgba(185, 28, 28, 0.3)');
+                gradGlow.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = gradGlow;
                 ctx.beginPath();
-                ctx.arc(cx, cy, 95, 0, Math.PI * 2);
+                ctx.arc(cx, cy, 90, 0, Math.PI * 2);
                 ctx.fill();
 
-                drawClaudeIcon(cx, cy, 46, '#ef4444', '#b91c1c');
+                drawClaudeSunburst(cx, cy, 45, '#c2410c', '#991b1b');
 
                 ctx.textAlign = 'center';
-                ctx.font = 'bold 13px sans-serif';
-                ctx.fillStyle = '#ef4444';
-                ctx.fillText('🚨 ТРЕВОГА: VPN РАЗОРВАН!', cx, cy + 72);
+                ctx.font = '600 12.5px sans-serif';
+                ctx.fillStyle = '#f87171';
+                ctx.fillText('Вход заблокирован: нет VPN', cx, cy + 72);
                 ctx.font = '10px sans-serif';
-                ctx.fillStyle = '#fca5a5';
-                ctx.fillText(alarmReason || 'ОБНАРУЖЕН ОБРЫВ ТУННЕЛЯ', cx, cy + 88);
+                ctx.fillStyle = '#a1a1aa';
+                ctx.fillText('Подключите VPN для защиты аккаунта от бана', cx, cy + 88);
             }
 
-            phase += 0.05;
+            phase += 0.04;
             requestAnimationFrame(draw);
         }
         requestAnimationFrame(draw);
 
-        function drawClaudeIcon(cx, cy, radius, c1, c2) {
+        function drawClaudeSunburst(cx, cy, radius, c1, c2) {
             const rays = 14;
-            const innerR = radius * 0.38;
+            const innerR = radius * 0.40;
             ctx.beginPath();
             for (let i = 0; i < rays * 2; i++) {
                 const angle = (i * Math.PI / rays) - (Math.PI / 2);
@@ -421,12 +379,9 @@
 
             // Core
             ctx.beginPath();
-            ctx.arc(cx, cy, innerR * 0.55, 0, Math.PI * 2);
-            ctx.fillStyle = '#0f131c';
+            ctx.arc(cx, cy, innerR * 0.50, 0, Math.PI * 2);
+            ctx.fillStyle = '#141519';
             ctx.fill();
-            ctx.strokeStyle = '#d97757';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
         }
 
         function toggleCard(id) {
@@ -440,24 +395,22 @@
                 window.AndroidXO.toggleSmartOverlay(isOverlayEnabled);
                 btn.innerText = isOverlayEnabled ? "Активен" : "Включить";
                 btn.className = isOverlayEnabled ? "toggle-btn active" : "toggle-btn";
-                log(isOverlayEnabled ? "Умный режим (поверх окон) включен" : "Умный режим отключен");
+                log(isOverlayEnabled ? "Умный режим поверх окон включен" : "Умный режим отключен");
             } else {
-                alert("Функция доступна при установке на Android устройстве.");
+                alert("Функция доступна на Android-устройстве.");
             }
         }
 
         function requestBatteryExemption() {
             if (window.AndroidXO && window.AndroidXO.requestBatteryOptimizationExemption) {
                 window.AndroidXO.requestBatteryOptimizationExemption();
-                log("Запрос исключения из энергосбережения");
-            } else {
-                alert("Настройки энергосбережения доступны на Android.");
+                log("Запрос исключения из режима энергосбережения");
             }
         }
 
-        function launchClaude() {
-            if (isProhibited) {
-                alert("Внимание! Обнаружен сбой туннеля! Claude заблокирован для предотвращения бана.");
+        function launchClaudeApp() {
+            if (!isSafe) {
+                alert("Запуск Claude заблокирован!\n\nТекущее соединение не защищено VPN. Подключите VPN (v2rayNG, Clash, WireGuard) для предотвращения бана аккаунта.");
                 return;
             }
             if (window.AndroidXO && window.AndroidXO.launchClaude) {
@@ -467,59 +420,61 @@
             }
         }
 
-        function runSimulation() {
-            isProhibited = true;
-            alarmReason = "СИМУЛЯЦИЯ: Сброс трафика Claude...";
-            log("[SIM] Тестовый сброс запущен. Перехват утечек: 0 мс");
-            if (window.AndroidXO && window.AndroidXO.vibratePhone) {
-                window.AndroidXO.vibratePhone(400);
+        function launchClaudeWeb() {
+            if (!isSafe) {
+                alert("Запуск Claude заблокирован!\n\nСначала включите VPN, чтобы защитить аккаунт от перманентного бана.");
+                return;
             }
-            setTimeout(() => {
-                isProhibited = false;
-                log("[SIM] Тест завершен успешно. Соединение верифицировано.");
-            }, 3000);
+            window.open('https://claude.ai', '_blank');
         }
-
-        function openVpnSettings() {
-            if (window.AndroidXO && window.AndroidXO.openVpnSettings) {
-                window.AndroidXO.openVpnSettings();
-            } else {
-                alert("Откройте Настройки -> Сеть и Интернет -> VPN.");
-            }
-        }
-
-        window.triggerProhibited = function(reason) {
-            isProhibited = true;
-            alarmReason = reason;
-            document.getElementById('badgeApi').className = "card-badge badge-danger";
-            document.getElementById('badgeApi').innerText = "ОБРЫВ!";
-            log(`[ALARM] ${reason}`);
-        };
 
         function runAudit() {
-            const t0 = performance.now();
+            log("[AUDIT] Проверка параметров соединения...");
             fetch('http://ip-api.com/json')
                 .then(r => r.json())
                 .then(data => {
-                    livePingMs = Math.round(performance.now() - t0);
                     const badge = document.getElementById('badgeIp');
                     const detail = document.getElementById('detailIp');
+                    const statusBox = document.getElementById('launchStatus');
+                    const btnApp = document.getElementById('btnLaunchApp');
+
                     if (data.countryCode === 'RU' || data.countryCode === 'BY') {
-                        badge.innerText = `${data.query} (РИСК БАНА)`;
+                        isSafe = false;
+                        country = data.country;
+                        badge.innerText = `Риск бана (${data.country})`;
                         badge.className = "card-badge badge-danger";
-                        detail.innerText = `ВНИМАНИЕ: IP ${data.country}! Claude заблокирован.`;
-                        isProhibited = true;
-                        alarmReason = "ОБНАРУЖЕН IP РФ!";
-                        log("[ALERT] Обнаружен IP РФ! Трафик отсечен.");
+                        detail.innerText = `Обнаружен IP адрес ${data.country}. Запуск Claude заблокирован.`;
+                        statusBox.innerText = `Вход заблокирован: обнаружен IP ${data.country}`;
+                        statusBox.className = "launch-status status-danger";
+                        btnApp.className = "btn-launch-primary blocked";
+                        btnApp.innerText = "Claude Mobile [Заблокировано]";
+                        log(`[ALERT] Обнаружен IP ${data.country}! Доступ заблокирован.`);
                     } else {
+                        isSafe = true;
+                        country = data.country;
                         badge.innerText = `${data.query} (${data.country})`;
                         badge.className = "card-badge badge-safe";
                         detail.innerText = `Внешний IP: ${data.query} (${data.country}). Туннель активен.`;
+                        statusBox.innerText = `Защита активна: безопасный запуск разрешен (${data.country})`;
+                        statusBox.className = "launch-status status-safe";
+                        btnApp.className = "btn-launch-primary";
+                        btnApp.innerText = "Запустить Claude Mobile";
+                        log(`[OK] IP подтвержден: ${data.country}. Безопасный режим активен.`);
                     }
                 })
                 .catch(() => {
-                    document.getElementById('badgeIp').innerText = "193.27.19.100 (Латвия)";
-                    document.getElementById('badgeIp').className = "card-badge badge-safe";
+                    // Fallback to checking VPN capability directly
+                    let vpnOn = false;
+                    if (window.AndroidXO && window.AndroidXO.isVpnConnected) {
+                        vpnOn = window.AndroidXO.isVpnConnected();
+                    }
+                    isSafe = vpnOn;
+                    if (!vpnOn) {
+                        document.getElementById('badgeIp').innerText = "VPN не подключен";
+                        document.getElementById('badgeIp').className = "card-badge badge-danger";
+                        document.getElementById('launchStatus').innerText = "Вход заблокирован: сначала включите VPN";
+                        document.getElementById('launchStatus').className = "launch-status status-danger";
+                    }
                 });
         }
 

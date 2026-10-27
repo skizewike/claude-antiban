@@ -21,13 +21,13 @@ namespace ProjectXO {
         }
 
         public UninstallerForm() {
-            Text = "PROJECT XO // ДЕИНСТАЛЛЯТОР — BOGDAN ZHUKOV";
+            Text = "Деинсталлятор Claude Anti-Ban Barrier — Bogdan Zhukov";
             Width = 560;
             Height = 440;
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
-            BackColor = Color.FromArgb(18, 20, 24);
+            BackColor = Color.FromArgb(19, 20, 24);
             ForeColor = Color.White;
             Font = new Font("Segoe UI", 9.5f);
 
@@ -35,43 +35,41 @@ namespace ProjectXO {
         }
 
         private void BuildUI() {
-            // Header
             Panel pnlHeader = new Panel() {
                 Dock = DockStyle.Top,
-                Height = 80,
-                BackColor = Color.FromArgb(24, 27, 34)
+                Height = 75,
+                BackColor = Color.FromArgb(14, 15, 18)
             };
             Controls.Add(pnlHeader);
 
             Label lblTitle = new Label() {
-                Text = "УДАЛЕНИЕ PROJECT XO",
-                Font = new Font("Segoe UI", 13f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(217, 119, 87),
-                Location = new Point(20, 15),
+                Text = "УДАЛЕНИЕ CLAUDE ANTI-BAN BARRIER",
+                Font = new Font("Segoe UI", 12f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(204, 120, 92),
+                Location = new Point(20, 14),
                 AutoSize = true
             };
             pnlHeader.Controls.Add(lblTitle);
 
             Label lblSub = new Label() {
-                Text = "Полная очистка системы, удаление правил Брандмауэра WFP и восстановление сети",
-                Font = new Font("Segoe UI", 9f),
+                Text = "Откат правил WFP, включение IPv6 и очистка системных записей",
+                Font = new Font("Segoe UI", 8.5f),
                 ForeColor = Color.FromArgb(161, 161, 170),
-                Location = new Point(22, 45),
+                Location = new Point(22, 42),
                 AutoSize = true
             };
             pnlHeader.Controls.Add(lblSub);
 
-            // Body
             _lblStatus = new Label() {
-                Text = "Нажмите «Удалить Project XO» для полной и безопасной деинсталляции.",
-                Location = new Point(25, 100),
+                Text = "Нажмите «Удалить барьер» для полной очистки и восстановления параметров сети.",
+                Location = new Point(25, 95),
                 Size = new Size(500, 36),
-                ForeColor = Color.FromArgb(228, 228, 231)
+                ForeColor = Color.FromArgb(212, 212, 216)
             };
             Controls.Add(_lblStatus);
 
             _pb = new ProgressBar() {
-                Location = new Point(25, 145),
+                Location = new Point(25, 140),
                 Size = new Size(495, 16),
                 Style = ProgressBarStyle.Continuous,
                 Value = 0
@@ -79,23 +77,22 @@ namespace ProjectXO {
             Controls.Add(_pb);
 
             _txtLog = new TextBox() {
-                Location = new Point(25, 175),
+                Location = new Point(25, 170),
                 Size = new Size(495, 155),
                 Multiline = true,
                 ReadOnly = true,
                 ScrollBars = ScrollBars.Vertical,
-                BackColor = Color.FromArgb(13, 15, 18),
+                BackColor = Color.FromArgb(12, 13, 16),
                 ForeColor = Color.FromArgb(212, 212, 216),
                 Font = new Font("Consolas", 8.5f)
             };
             Controls.Add(_txtLog);
 
-            // Bottom Buttons
             _btnUninstall = new Button() {
-                Text = "Удалить Project XO",
+                Text = "Удалить барьер",
                 Location = new Point(25, 345),
                 Size = new Size(240, 38),
-                BackColor = Color.FromArgb(220, 38, 38),
+                BackColor = Color.FromArgb(185, 28, 28),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
@@ -109,13 +106,13 @@ namespace ProjectXO {
                 Text = "Отмена",
                 Location = new Point(280, 345),
                 Size = new Size(240, 38),
-                BackColor = Color.FromArgb(39, 39, 42),
+                BackColor = Color.FromArgb(38, 40, 48),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
                 Font = new Font("Segoe UI", 9.5f),
                 Cursor = Cursors.Hand
             };
-            _btnClose.FlatAppearance.BorderSize = 0;
+            _btnClose.FlatAppearance.BorderColor = Color.FromArgb(63, 63, 70);
             _btnClose.Click += (s, e) => Close();
             Controls.Add(_btnClose);
         }
@@ -130,21 +127,20 @@ namespace ProjectXO {
 
         private void StartUninstall() {
             DialogResult dr = MessageBox.Show(
-                "Вы действительно хотите полностью удалить Project XO и восстановить стандартные параметры сети?",
+                "Вы действительно хотите удалить Claude Anti-Ban Barrier и восстановить сетевые параметры Windows?",
                 "Подтверждение удаления",
                 MessageBoxButtons.YesNo,
-                MessageBoxIcon.Warning);
+                MessageBoxIcon.Question);
 
             if (dr != DialogResult.Yes) return;
 
             _btnUninstall.Enabled = false;
             _btnClose.Enabled = false;
-            _lblStatus.Text = "Выполняется очистка системы...";
+            _lblStatus.Text = "Выполняется очистка конфигурации...";
 
             System.Threading.ThreadPool.QueueUserWorkItem((st) => {
                 try {
-                    // Step 1: Kill running ProjectXO
-                    Log("Завершение процессов ProjectXO...");
+                    Log("Завершение активных процессов барьера...");
                     SetProgress(15);
                     try {
                         foreach (Process p in Process.GetProcessesByName("ProjectXO")) {
@@ -152,24 +148,23 @@ namespace ProjectXO {
                         }
                     } catch {}
 
-                    // Step 2: Remove Firewall WFP Rules
-                    Log("Очистка правил Брандмауэра Windows (Claude-Shield-*)...");
+                    Log("Удаление правил Брандмауэра Windows (Claude-Shield-*)...");
                     SetProgress(35);
                     try {
                         Process pFw = new Process();
                         pFw.StartInfo.FileName = "powershell.exe";
-                        pFw.StartInfo.Arguments = "-NoProfile -Command \"Remove-NetFirewallRule -DisplayName 'Claude-Shield-*' -ErrorAction SilentlyContinue\"";
+                        pFw.StartInfo.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"Remove-NetFirewallRule -DisplayName 'Claude-Shield-*' -ErrorAction SilentlyContinue\"";
                         pFw.StartInfo.CreateNoWindow = true;
                         pFw.StartInfo.UseShellExecute = false;
+                        pFw.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
                         pFw.Start();
                         pFw.WaitForExit();
-                        Log("✓ Правила WFP ядра успешно удалены.");
+                        Log("Правила WFP ядра успешно удалены.");
                     } catch (Exception ex) {
-                        Log("! Ошибка при удалении правил WFP: " + ex.Message);
+                        Log("Ошибка очистки WFP: " + ex.Message);
                     }
 
-                    // Step 3: Restore IPv6 & DNS Registry Settings
-                    Log("Восстановление сетевых настроек Windows...");
+                    Log("Восстановление сетевых параметров Windows...");
                     SetProgress(55);
                     try {
                         using (RegistryKey rk = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters", true)) {
@@ -177,71 +172,69 @@ namespace ProjectXO {
                                 rk.DeleteValue("DisableSmartNameResolution", false);
                             }
                         }
-                        Log("✓ Режим Smart Multi-Homed Name Resolution восстановлен.");
+                        Log("Режим разрешения DNS восстановлен.");
                     } catch {}
 
-                    // Re-enable IPv6 on network adapters
                     try {
                         Process pIp6 = new Process();
                         pIp6.StartInfo.FileName = "powershell.exe";
-                        pIp6.StartInfo.Arguments = "-NoProfile -Command \"Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Enable-NetAdapterBinding -ComponentId ms_tcpip6 -ErrorAction SilentlyContinue\"";
+                        pIp6.StartInfo.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Enable-NetAdapterBinding -ComponentId ms_tcpip6 -ErrorAction SilentlyContinue\"";
                         pIp6.StartInfo.CreateNoWindow = true;
                         pIp6.StartInfo.UseShellExecute = false;
+                        pIp6.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
                         pIp6.Start();
                         pIp6.WaitForExit();
-                        Log("✓ Привязка IPv6 на физических адаптерах включена.");
+                        Log("Привязка протокола IPv6 на сетевых адаптерах включена.");
                     } catch {}
 
-                    // Step 4: Remove Windows Auto-Start
-                    Log("Удаление из автозагрузки Windows...");
+                    Log("Удаление из автозагрузки...");
                     SetProgress(75);
                     try {
                         using (RegistryKey rk = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true)) {
-                            if (rk != null && rk.GetValue("ProjectXO") != null) {
-                                rk.DeleteValue("ProjectXO");
-                                Log("✓ Запись автозагрузки ProjectXO удалена.");
+                            if (rk != null && rk.GetValue("ClaudeAntiBanBarrier") != null) {
+                                rk.DeleteValue("ClaudeAntiBanBarrier");
+                                Log("Запись автозагрузки удалена.");
                             }
                         }
                     } catch {}
 
-                    // Step 5: Remove Shortcuts
-                    Log("Удаление ярлыков на Рабочем столе и в меню Пуск...");
+                    Log("Удаление ярлыков рабочего стола...");
                     SetProgress(90);
                     string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                     string startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Project XO");
 
                     string lnkDesktop = Path.Combine(desktop, "Project XO.lnk");
                     if (File.Exists(lnkDesktop)) {
-                        try { File.Delete(lnkDesktop); Log("✓ Ярлык на Рабочем столе удален."); } catch {}
+                        try { File.Delete(lnkDesktop); Log("Ярлык на Рабочем столе удален."); } catch {}
                     }
 
                     if (Directory.Exists(startMenu)) {
-                        try { Directory.Delete(startMenu, true); Log("✓ Папка в меню Пуск удалена."); } catch {}
+                        try { Directory.Delete(startMenu, true); Log("Папка меню Пуск удалена."); } catch {}
                     }
 
-                    // Step 6: Remove Add/Remove Programs entry
                     try {
                         Registry.CurrentUser.DeleteSubKeyTree(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\ProjectXO", false);
+                        Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ProjectXO", false);
                     } catch {}
 
                     SetProgress(100);
                     Log("==================================================");
-                    Log("✓ PROJECT XO УСПЕШНО И ПОЛНОСТЬЮ УДАЛЕН С КОМПЬЮТЕРА!");
+                    Log("УДАЛЕНИЕ УСПЕШНО ЗАВЕРШЕНО.");
                     Log("==================================================");
 
                     Invoke(new Action(() => {
-                        _lblStatus.Text = "Удаление успешно завершено!";
-                        _lblStatus.ForeColor = Color.FromArgb(16, 185, 129);
-                        _btnClose.Text = "Завершить";
+                        _lblStatus.Text = "Удаление завершено. Сетевые параметры восстановлены.";
+                        _lblStatus.ForeColor = Color.FromArgb(204, 120, 92);
+                        _btnClose.Text = "Закрыть";
                         _btnClose.Enabled = true;
-                        MessageBox.Show("Project XO успешно удален из системы.\nВсе сетевые настройки и правила Брандмауэра возвращены в исходное состояние.",
+                        MessageBox.Show("Барьер успешно удален. Все настройки сети возвращены в исходное состояние.",
                             "Удаление завершено", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }));
                 } catch (Exception ex) {
-                    Log("Критическая ошибка деинсталляции: " + ex.Message);
+                    Log("Ошибка удаления: " + ex.Message);
                     Invoke(new Action(() => {
-                        _lblStatus.Text = "Произошла ошибка при удалении.";
-                        _lblStatus.ForeColor = Color.FromArgb(239, 68, 68);
+                        _lblStatus.Text = "Произошла ошибка при деинсталляции.";
+                        _lblStatus.ForeColor = Color.FromArgb(248, 113, 113);
                         _btnClose.Enabled = true;
                     }));
                 }
