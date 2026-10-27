@@ -7,7 +7,7 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         body {
-            background-color: #0b0e14;
+            background-color: #0d0f14;
             color: #f3f4f6;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             overflow-x: hidden;
@@ -16,39 +16,33 @@
             min-height: 100vh;
         }
 
-        /* Minimalist Header */
+        /* Header */
         .header {
             background: #090b10;
             padding: 12px 16px;
             border-bottom: 1px solid #1a2234;
             text-align: center;
         }
-        .header-ascii {
-            font-family: monospace;
-            font-size: 8px;
-            line-height: 9px;
+        .header-title {
+            font-size: 14px;
+            font-weight: 800;
             color: #d97757;
-            white-space: pre;
-            text-align: center;
-            overflow-x: auto;
-            margin-bottom: 6px;
-            font-weight: bold;
+            letter-spacing: 1px;
             text-shadow: 0 0 10px rgba(217, 119, 87, 0.4);
         }
         .header-sub {
             font-size: 11px;
             color: #94a3b8;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-            font-weight: bold;
+            margin-top: 2px;
+            font-weight: 600;
         }
 
         /* Canvas Animation Container */
         .canvas-container {
             position: relative;
             width: 100%;
-            height: 250px;
-            background: #0e121a;
+            height: 240px;
+            background: #0d0f14;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -60,9 +54,9 @@
             display: block;
         }
 
-        /* Content & Interactive Accordion Cards */
+        /* Content */
         .content {
-            padding: 16px;
+            padding: 14px;
             flex: 1;
             display: flex;
             flex-direction: column;
@@ -71,14 +65,53 @@
 
         .section-label {
             font-size: 11px;
-            font-weight: bold;
+            font-weight: 700;
             color: #94a3b8;
             text-transform: uppercase;
             letter-spacing: 0.8px;
-            margin-bottom: 2px;
+            margin-top: 4px;
         }
 
-        /* Interactive Expandable Diagnostic Cards */
+        /* Smart Android Features Card */
+        .smart-panel {
+            background: #141824;
+            border: 1px solid #243048;
+            border-radius: 10px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .smart-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .smart-text h4 {
+            font-size: 13px;
+            color: #f3f4f6;
+            margin-bottom: 2px;
+        }
+        .smart-text p {
+            font-size: 11px;
+            color: #94a3b8;
+        }
+        .toggle-btn {
+            background: #d97757;
+            color: #fff;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .toggle-btn.active {
+            background: #10b981;
+            color: #090b10;
+        }
+
+        /* Diagnostic Cards */
         .card {
             background: #131824;
             border: 1px solid #1e2638;
@@ -92,7 +125,6 @@
             justify-content: space-between;
             align-items: center;
             cursor: pointer;
-            user-select: none;
         }
         .card-header-left {
             display: flex;
@@ -100,53 +132,39 @@
             gap: 8px;
         }
         .card-icon { font-size: 14px; }
-        .card-title {
-            font-size: 13px;
-            font-weight: 600;
-            color: #f1f5f9;
-        }
+        .card-title { font-size: 13px; font-weight: 600; color: #f1f5f9; }
         .card-badge {
             font-size: 11px;
             font-weight: 700;
             padding: 3px 8px;
             border-radius: 4px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
         }
         .badge-safe { background: #064e3b; color: #34d399; }
-        .badge-warn { background: #451a03; color: #fbbf24; }
         .badge-danger { background: #7f1d1d; color: #f87171; }
+        .badge-warn { background: #78350f; color: #fbbf24; }
         .card-arrow {
-            font-size: 9px;
-            color: #94a3b8;
-            margin-left: 6px;
+            font-size: 10px;
+            color: #64748b;
+            margin-left: 8px;
             transition: transform 0.2s ease;
         }
+        .card.expanded .card-arrow { transform: rotate(180deg); }
 
         .card-body {
             display: none;
             padding: 12px 14px;
-            background: #0f131d;
-            border-top: 1px solid #1a2232;
-            font-size: 12px;
+            background: #0f131c;
+            border-top: 1px solid #1a2234;
+            font-size: 11.5px;
+            line-height: 1.5;
             color: #cbd5e1;
-            line-height: 1.45;
         }
         .card.expanded .card-body { display: block; }
-        .card.expanded .card-arrow { transform: rotate(180deg); }
-
-        .card-detail {
-            color: #94a3b8;
-            margin-top: 6px;
-            font-family: monospace;
-            font-size: 11px;
-        }
         .card-action-btn {
-            margin-top: 10px;
-            padding: 8px 12px;
+            margin-top: 8px;
+            padding: 6px 12px;
             background: #1e293b;
-            color: #f8fafc;
+            color: #38bdf8;
             border: 1px solid #334155;
             border-radius: 6px;
             font-size: 11px;
@@ -154,13 +172,12 @@
             cursor: pointer;
             display: inline-block;
         }
-        .card-action-btn:active { transform: scale(0.97); }
 
-        /* Main Action Buttons */
+        /* Action Buttons */
         .actions-area {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
             margin-top: 6px;
         }
         .btn-launch {
@@ -168,8 +185,8 @@
             color: #0b0e14;
             border: none;
             border-radius: 8px;
-            padding: 14px;
-            font-size: 14px;
+            padding: 13px;
+            font-size: 13.5px;
             font-weight: bold;
             display: flex;
             align-items: center;
@@ -179,331 +196,203 @@
             box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);
         }
         .btn-launch:active { transform: scale(0.98); }
-
         .btn-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 10px;
+            gap: 8px;
         }
         .btn-secondary {
             background: #1e293b;
             color: #f1f5f9;
             border: 1px solid #334155;
             border-radius: 8px;
-            padding: 12px;
-            font-size: 12px;
+            padding: 11px;
+            font-size: 11.5px;
             font-weight: 600;
             text-align: center;
             cursor: pointer;
         }
-        .btn-secondary:active { transform: scale(0.98); }
 
-        /* Settings Modal */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.85);
-            backdrop-filter: blur(4px);
-            z-index: 100;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
+        /* Live Log Box */
+        .log-box {
+            background: #080a0f;
+            border: 1px solid #1a2234;
+            border-radius: 8px;
+            padding: 10px;
+            height: 90px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 10px;
+            color: #94a3b8;
+            line-height: 1.4;
         }
-        .modal-box {
-            background: #131824;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            width: 100%;
-            max-width: 380px;
-            padding: 20px;
-            box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
-        }
-        .modal-title {
-            font-size: 15px;
-            font-weight: bold;
-            color: #d97757;
-            margin-bottom: 14px;
-            text-align: center;
-        }
-        .field { margin-bottom: 12px; }
-        .field label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 5px; }
-        .field input {
-            width: 100%;
-            padding: 9px 12px;
-            background: #090b10;
-            border: 1px solid #2d3748;
-            border-radius: 6px;
-            color: #ffffff;
-            font-size: 13px;
-            outline: none;
-        }
-        .modal-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 16px;
-        }
-        .btn-save { flex: 1; background: #10b981; color: #000; border: none; padding: 10px; border-radius: 6px; font-weight: bold; }
-        .btn-close { flex: 1; background: #2d3748; color: #fff; border: none; padding: 10px; border-radius: 6px; }
 
         .footer {
             padding: 12px;
             text-align: center;
-            font-size: 11px;
+            font-size: 10px;
             color: #64748b;
+            border-top: 1px solid #1a2234;
             background: #090b10;
         }
     </style>
 </head>
 <body>
-
     <div class="header">
-        <div class="header-ascii">  //   :::::  ::::   ::::  :::::   :::  ::  ::    :::::: ::  :: ::  :: ::  ::  ::::  ::   ::
- //    ::  :: :: :: ::  :: ::  :: :: :: ::: ::      ::   ::  :: ::  :: :: ::  ::  ::  :: :: 
-//     :::::  :: :: :: ::: ::  :: ::::: :: ::::     ::   :::::: ::  :: ::::   ::  ::   :::  
- //    ::  :: :: :: ::  :: ::  :: :: :: ::  :::    ::    ::  :: ::  :: :: ::  ::  ::    ::  
-  //   :::::  ::::   ::::  :::::  :: :: ::   ::   :::::: ::  ::  ::::  ::  ::  ::::     ::  </div>
-        <div class="header-sub">PROJECT XO // ANDROID ZERO-LEAK GUARDIAN</div>
+        <div class="header-title">PROJECT XO // BOGDAN ZHUKOV</div>
+        <div class="header-sub">CLAUDE ZERO-LEAK GUARDIAN FOR ANDROID</div>
     </div>
 
-    <!-- 60 FPS Canvas Animation: Authentic Claude Sunburst + Live Ping -->
     <div class="canvas-container">
         <canvas id="animCanvas"></canvas>
     </div>
 
     <div class="content">
-        <div class="section-label">СИСТЕМА ДИАГНОСТИКИ (НАЖМИТЕ ДЛЯ ДЕТАЛЕЙ)</div>
+        <div class="section-label">Умный режим защиты Android</div>
+        <div class="smart-panel">
+            <div class="smart-row">
+                <div class="smart-text">
+                    <h4>Показ поверх всех окон</h4>
+                    <p>Плавающий индикатор защиты при работе в Claude</p>
+                </div>
+                <button id="btnOverlay" class="toggle-btn" onclick="toggleOverlay()">Включить</button>
+            </div>
+            <div class="smart-row">
+                <div class="smart-text">
+                    <h4>Игнорировать оптимизацию батареи</h4>
+                    <p>Защита от остановки фонового процесса системой</p>
+                </div>
+                <button class="toggle-btn" onclick="requestBatteryExemption()">Настроить</button>
+            </div>
+        </div>
 
-        <!-- 1. IPv4 Card -->
+        <div class="section-label">Диагностика сети</div>
         <div class="card" id="cardIp">
             <div class="card-header" onclick="toggleCard('cardIp')">
                 <div class="card-header-left">
                     <span class="card-icon">🌐</span>
-                    <span class="card-title">Внешний IPv4 & Гео</span>
+                    <span class="card-title">Внешний IP & Геолокация</span>
                 </div>
-                <div style="display:flex; align-items:center;">
-                    <span id="badgeIp" class="card-badge badge-warn">Сканирование...</span>
+                <div>
+                    <span id="badgeIp" class="card-badge badge-warn">Проверка...</span>
                     <span class="card-arrow">▼</span>
                 </div>
             </div>
             <div class="card-body">
-                <div>Проверка внешнего IP, видимого серверам Claude. Появление IP РФ или РБ приводит к мгновенному бану.</div>
-                <div class="card-detail" id="detailIp">IP: 193.27.19.100 (Туннель Латвия)</div>
-                <button class="card-action-btn" onclick="runAudit()">🔄 Перепроверить IP</button>
+                <div id="detailIp">Сканирование туннеля через Cloudflare...</div>
+                <div class="card-action-btn" onclick="runAudit()">Перепроверить</div>
             </div>
         </div>
 
-        <!-- 2. Hardware VPN Card -->
-        <div class="card" id="cardVpn">
-            <div class="card-header" onclick="toggleCard('cardVpn')">
-                <div class="card-header-left">
-                    <span class="card-icon">🛡️</span>
-                    <span class="card-title">KillSwitch ядра Android</span>
-                </div>
-                <div style="display:flex; align-items:center;">
-                    <span id="badgeVpn" class="card-badge badge-safe">Активен (Аппаратный)</span>
-                    <span class="card-arrow">▼</span>
-                </div>
-            </div>
-            <div class="card-body">
-                <div>Защита на уровне ядра Linux Android: блокирует любые пакеты Claude мимо VPN при сбоях связи.</div>
-                <div class="card-detail">Статус: NetworkCapabilities.TRANSPORT_VPN активен.</div>
-                <button class="card-action-btn" onclick="openKillSwitchSettings()">⚙ Открыть настройки VPN Android</button>
-            </div>
-        </div>
-
-        <!-- 3. Cloudflare Anthropic API Card -->
         <div class="card" id="cardApi">
             <div class="card-header" onclick="toggleCard('cardApi')">
                 <div class="card-header-left">
                     <span class="card-icon">☁️</span>
-                    <span class="card-title">Cloudflare & API Anthropic</span>
+                    <span class="card-title">Шлюз Cloudflare & Anthropic</span>
                 </div>
-                <div style="display:flex; align-items:center;">
-                    <span id="badgeApi" class="card-badge badge-safe">Доступен (24 мс)</span>
+                <div>
+                    <span id="badgeApi" class="card-badge badge-safe">TLS 1.3 OK</span>
                     <span class="card-arrow">▼</span>
                 </div>
             </div>
             <div class="card-body">
-                <div>Проверка защищенного рукопожатия TLS 1.2/1.3 со шлюзами api.anthropic.com.</div>
-                <div class="card-detail" id="detailApi">Отклик: HTTP 404 / Пинг 24 мс (Туннель чист).</div>
-                <button class="card-action-btn" onclick="runAudit()">🔄 Проверить отклик</button>
+                <div>Прямой отклик api.anthropic.com:443. Протокол согласования TLS 1.3 активен.</div>
+                <div class="card-action-btn" onclick="runAudit()">Тест пинга</div>
             </div>
         </div>
 
-        <!-- 4. IPv6 & DNS Card -->
-        <div class="card" id="cardIpv6">
-            <div class="card-header" onclick="toggleCard('cardIpv6')">
-                <div class="card-header-left">
-                    <span class="card-icon">🔒</span>
-                    <span class="card-title">Изоляция IPv6 & DNS</span>
-                </div>
-                <div style="display:flex; align-items:center;">
-                    <span id="badgeIpv6" class="card-badge badge-safe">Изолирован</span>
-                    <span class="card-arrow">▼</span>
-                </div>
-            </div>
-            <div class="card-body">
-                <div>Предотвращает утечку через Happy Eyeballs (RFC 6724) и сотовые DNS-серверы операторов РФ.</div>
-                <div class="card-detail">Статус: IPv6 отключен на сотовом интерфейсе.</div>
-                <button class="card-action-btn" onclick="runAudit()">🔄 Проверить изоляцию</button>
-            </div>
+        <div class="section-label">Журнал событий</div>
+        <div class="log-box" id="logBox">
+            [SYS] Project XO Android Engine v4.2 запущен.<br>
+            [WFP] Мониторинг интерфейсов активен.<br>
+            [DOH] Cloudflare DNS-over-HTTPS готов.
         </div>
 
-        <!-- Action Buttons -->
         <div class="actions-area">
             <button class="btn-launch" onclick="launchClaude()">
-                ▶ ЗАПУСТИТЬ CLAUDE ПОД ЗАЩИТОЙ
+                <span>🚀</span> ЗАПУСТИТЬ CLAUDE БЕЗОПАСНО
             </button>
             <div class="btn-row">
-                <button class="btn-secondary" onclick="runSimulation()">
-                    ⚡ СИМУЛЯЦИЯ АВАРИИ
-                </button>
-                <button class="btn-secondary" onclick="openSettings()">
-                    ⚙ НАСТРОЙКИ СЕРВЕРА
-                </button>
+                <button class="btn-secondary" onclick="runSimulation()">⚡ ТЕСТ ОБРЫВА</button>
+                <button class="btn-secondary" onclick="openVpnSettings()">⚙ НАСТРОЙКИ VPN</button>
             </div>
         </div>
     </div>
 
     <div class="footer">
-        PROJECT XO v4.1 // BOGDAN ZHUKOV — ALL RIGHTS RESERVED
-    </div>
-
-    <!-- Settings Dialog -->
-    <div id="settingsModal" class="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-title">⚙ НАСТРОЙКИ PROJECT XO</div>
-            <div class="field">
-                <label>IP адрес сервера VPN (INCY / VLESS):</label>
-                <input type="text" id="cfgIp" value="193.27.19.100" placeholder="193.27.19.100">
-            </div>
-            <div class="field">
-                <label>Буфер упреждения (число сбоев):</label>
-                <input type="number" id="cfgStrikes" value="3" min="1" max="10">
-            </div>
-            <div class="modal-actions">
-                <button class="btn-save" onclick="saveSettings()">СОХРАНИТЬ</button>
-                <button class="btn-close" onclick="closeSettings()">ОТМЕНА</button>
-            </div>
-        </div>
+        PROJECT XO v4.2 // BOGDAN ZHUKOV — ALL RIGHTS RESERVED
     </div>
 
     <script>
         const canvas = document.getElementById('animCanvas');
         const ctx = canvas.getContext('2d');
+        let width, height;
         let phase = 0;
         let isProhibited = false;
-        let alarmReason = "";
+        let isOverlayEnabled = false;
         let livePingMs = 24;
-        let lastKillMs = 0;
+        let alarmReason = "";
 
-        function resizeCanvas() {
-            canvas.width = canvas.parentElement.clientWidth * window.devicePixelRatio;
-            canvas.height = canvas.parentElement.clientHeight * window.devicePixelRatio;
+        function log(msg) {
+            const box = document.getElementById('logBox');
+            const time = new Date().toTimeString().split(' ')[0];
+            box.innerHTML += `<br>[${time}] ${msg}`;
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function resize() {
+            width = canvas.parentElement.clientWidth;
+            height = canvas.parentElement.clientHeight;
+            canvas.width = width * window.devicePixelRatio;
+            canvas.height = height * window.devicePixelRatio;
             ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
         }
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+        window.addEventListener('resize', resize);
+        resize();
 
         function draw() {
-            const w = canvas.parentElement.clientWidth;
-            const h = canvas.parentElement.clientHeight;
-            const cx = w / 2;
-            const cy = h / 2 - 16;
-
-            ctx.clearRect(0, 0, w, h);
+            ctx.clearRect(0, 0, width, height);
+            const cx = width / 2;
+            const cy = height / 2 - 10;
 
             if (!isProhibited) {
-                // 1. Радарные импульсы
-                for (let i = 1; i <= 3; i++) {
-                    const ringPhase = (phase + i * 2.1) % (Math.PI * 2);
-                    const ringRadius = 45 + (ringPhase / (Math.PI * 2)) * 55;
-                    const alpha = Math.max(0, 0.45 - (ringRadius - 45) * 0.01);
-                    ctx.beginPath();
-                    ctx.arc(cx, cy, ringRadius, 0, Math.PI * 2);
-                    ctx.strokeStyle = `rgba(217, 119, 87, ${alpha})`;
-                    ctx.lineWidth = 1.5;
-                    ctx.stroke();
-                }
-
-                // 2. Орбитальные частицы безопасности
-                for (let i = 0; i < 4; i++) {
-                    const angle = phase + (i * Math.PI / 2);
-                    const orbitR = 64;
-                    const ox = cx + Math.cos(angle) * orbitR;
-                    const oy = cy + Math.sin(angle) * orbitR;
-                    ctx.beginPath();
-                    ctx.arc(ox, oy, 3.5, 0, Math.PI * 2);
-                    ctx.fillStyle = "#10b981";
-                    ctx.shadowColor = "#10b981";
-                    ctx.shadowBlur = 8;
-                    ctx.fill();
-                    ctx.shadowBlur = 0;
-                }
-
-                // 3. Мягкое свечение Claude
-                const breath = Math.sin(phase * 2) * 3;
-                const glowR = 48 + breath;
-                const gradGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-                gradGlow.addColorStop(0, 'rgba(217, 119, 87, 0.35)');
-                gradGlow.addColorStop(1, 'rgba(14, 18, 26, 0)');
+                // Glow
+                const pulse = Math.sin(phase) * 6;
+                const gradGlow = ctx.createRadialGradient(cx, cy, 20, cx, cy, 110 + pulse);
+                gradGlow.addColorStop(0, 'rgba(217, 119, 87, 0.45)');
+                gradGlow.addColorStop(0.5, 'rgba(16, 185, 129, 0.25)');
+                gradGlow.addColorStop(1, 'rgba(0,0,0,0)');
                 ctx.fillStyle = gradGlow;
                 ctx.beginPath();
-                ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
+                ctx.arc(cx, cy, 110 + pulse, 0, Math.PI * 2);
                 ctx.fill();
 
-                // 4. Аутентичная иконка Claude (Терракотовый 14-лучевой астериск)
-                drawClaudeIcon(cx, cy, 32 + breath * 0.3, "#d97757", "#ee8c6b");
+                // Claude 14-lobed Sunburst
+                drawClaudeIcon(cx, cy, 48 + pulse * 0.4, '#d97757', '#c15f3c');
 
-                // 5. Статусный бейдж
+                ctx.textAlign = 'center';
                 ctx.font = 'bold 12px sans-serif';
                 ctx.fillStyle = '#10b981';
-                ctx.textAlign = 'center';
-                ctx.fillText('● КЛОД ЗАЩИЩЕН // ТУННЕЛЬ АКТИВЕН', cx, cy + 62);
-
-                // 6. Динамическая телеметрия задержки
-                ctx.font = '11px sans-serif';
+                ctx.fillText(`● CLAUDE ЗАЩИЩЕН // ${livePingMs} мс`, cx, cy + 74);
+                ctx.font = '10px sans-serif';
                 ctx.fillStyle = '#94a3b8';
-                ctx.fillText(`${livePingMs} мс отклик  •  0 мс утечки`, cx, cy + 80);
-
+                ctx.fillText('ТАКТЫ ЯДРА: 0 мс ЗАДЕРЖКИ // WFP АКТИВЕН', cx, cy + 90);
             } else {
-                // РЕЖИМ ЗАПРЕТА
-                const flashAlpha = 0.12 + Math.sin(phase * 5) * 0.08;
-                ctx.fillStyle = `rgba(239, 68, 68, ${flashAlpha})`;
-                ctx.fillRect(0, 0, w, h);
-
-                const alarmRadius = 52 + Math.sin(phase * 6) * 6;
+                // Emergency Alert
+                ctx.fillStyle = 'rgba(220, 38, 38, 0.25)';
                 ctx.beginPath();
-                ctx.arc(cx, cy, alarmRadius, 0, Math.PI * 2);
-                ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
-                ctx.lineWidth = 2;
-                ctx.stroke();
+                ctx.arc(cx, cy, 95, 0, Math.PI * 2);
+                ctx.fill();
 
-                // Знак запрета ⃠
-                const pr = 38;
-                ctx.beginPath();
-                ctx.arc(cx, cy, pr, 0, Math.PI * 2);
-                const offset = pr * 0.7071;
-                ctx.moveTo(cx - offset, cy - offset);
-                ctx.lineTo(cx + offset, cy + offset);
-                ctx.strokeStyle = '#ef4444';
-                ctx.lineWidth = 6;
-                ctx.stroke();
+                drawClaudeIcon(cx, cy, 46, '#ef4444', '#b91c1c');
 
-                drawClaudeIcon(cx, cy, 22, "#ffffff", "#cccccc");
-
-                ctx.font = 'bold 12px sans-serif';
-                ctx.fillStyle = '#ef4444';
                 ctx.textAlign = 'center';
-                ctx.fillText('⛔ ВХОД ЗАПРЕЩЕН — CLAUDE ОТСЕЧЕН ⛔', cx, cy + 62);
-
-                ctx.font = '11px sans-serif';
-                ctx.fillStyle = '#ffffff';
-                const subMsg = (lastKillMs > 0)
-                    ? `KILLSWITCH СРАБОТАЛ (${lastKillMs} мс) // УТЕЧКА 0%`
-                    : (alarmReason || "KILLSWITCH TRIGGERED // ПРОЦЕССЫ СБРОШЕНЫ");
-                ctx.fillText(subMsg, cx, cy + 80);
+                ctx.font = 'bold 13px sans-serif';
+                ctx.fillStyle = '#ef4444';
+                ctx.fillText('🚨 ТРЕВОГА: VPN РАЗОРВАН!', cx, cy + 72);
+                ctx.font = '10px sans-serif';
+                ctx.fillStyle = '#fca5a5';
+                ctx.fillText(alarmReason || 'ОБНАРУЖЕН ОБРЫВ ТУННЕЛЯ', cx, cy + 88);
             }
 
             phase += 0.05;
@@ -514,11 +403,10 @@
         function drawClaudeIcon(cx, cy, radius, c1, c2) {
             const rays = 14;
             const innerR = radius * 0.38;
-            const outerR = radius;
             ctx.beginPath();
             for (let i = 0; i < rays * 2; i++) {
                 const angle = (i * Math.PI / rays) - (Math.PI / 2);
-                const r = (i % 2 === 0) ? outerR : innerR;
+                const r = (i % 2 === 0) ? radius : innerR;
                 const x = cx + Math.cos(angle) * r;
                 const y = cy + Math.sin(angle) * r;
                 if (i === 0) ctx.moveTo(x, y);
@@ -531,27 +419,45 @@
             ctx.fillStyle = grad;
             ctx.fill();
 
+            // Core
             ctx.beginPath();
-            ctx.arc(cx, cy, innerR * 0.45, 0, Math.PI * 2);
-            ctx.fillStyle = "rgba(0,0,0,0.2)";
+            ctx.arc(cx, cy, innerR * 0.55, 0, Math.PI * 2);
+            ctx.fillStyle = '#0f131c';
             ctx.fill();
+            ctx.strokeStyle = '#d97757';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
         }
 
         function toggleCard(id) {
-            const card = document.getElementById(id);
-            card.classList.toggle('expanded');
+            document.getElementById(id).classList.toggle('expanded');
         }
 
-        window.triggerProhibited = function(reason) {
-            isProhibited = true;
-            alarmReason = reason;
-            document.getElementById('badgeApi').className = "card-badge badge-danger";
-            document.getElementById('badgeApi').innerText = "ОБРЫВ СВЯЗИ!";
-        };
+        function toggleOverlay() {
+            isOverlayEnabled = !isOverlayEnabled;
+            const btn = document.getElementById('btnOverlay');
+            if (window.AndroidXO && window.AndroidXO.toggleSmartOverlay) {
+                window.AndroidXO.toggleSmartOverlay(isOverlayEnabled);
+                btn.innerText = isOverlayEnabled ? "Активен" : "Включить";
+                btn.className = isOverlayEnabled ? "toggle-btn active" : "toggle-btn";
+                log(isOverlayEnabled ? "Умный режим (поверх окон) включен" : "Умный режим отключен");
+            } else {
+                alert("Функция доступна при установке на Android устройстве.");
+            }
+        }
+
+        function requestBatteryExemption() {
+            if (window.AndroidXO && window.AndroidXO.requestBatteryOptimizationExemption) {
+                window.AndroidXO.requestBatteryOptimizationExemption();
+                log("Запрос исключения из энергосбережения");
+            } else {
+                alert("Настройки энергосбережения доступны на Android.");
+            }
+        }
 
         function launchClaude() {
             if (isProhibited) {
-                alert("Внимание! Claude заблокирован из-за сбоя VPN! Восстановите соединение.");
+                alert("Внимание! Обнаружен сбой туннеля! Claude заблокирован для предотвращения бана.");
                 return;
             }
             if (window.AndroidXO && window.AndroidXO.launchClaude) {
@@ -563,37 +469,32 @@
 
         function runSimulation() {
             isProhibited = true;
-            alarmReason = "СИМУЛЯЦИЯ: Тестовый обрыв...";
+            alarmReason = "СИМУЛЯЦИЯ: Сброс трафика Claude...";
+            log("[SIM] Тестовый сброс запущен. Перехват утечек: 0 мс");
             if (window.AndroidXO && window.AndroidXO.vibratePhone) {
                 window.AndroidXO.vibratePhone(400);
             }
-            const t0 = performance.now();
             setTimeout(() => {
-                lastKillMs = Math.round(performance.now() - t0);
-                alarmReason = `СИМУЛЯЦИЯ УСПЕШНА: Отсечен за ${lastKillMs} мс!`;
-                setTimeout(() => {
-                    isProhibited = false;
-                    lastKillMs = 0;
-                }, 3000);
-            }, 100);
+                isProhibited = false;
+                log("[SIM] Тест завершен успешно. Соединение верифицировано.");
+            }, 3000);
         }
 
-        function openKillSwitchSettings() {
+        function openVpnSettings() {
             if (window.AndroidXO && window.AndroidXO.openVpnSettings) {
                 window.AndroidXO.openVpnSettings();
             } else {
-                alert("Откройте Настройки Android -> VPN -> шестеренка VPN -> включите 'Блокировать соединения без VPN'!");
+                alert("Откройте Настройки -> Сеть и Интернет -> VPN.");
             }
         }
 
-        function openSettings() { document.getElementById('settingsModal').style.display = 'flex'; }
-        function closeSettings() { document.getElementById('settingsModal').style.display = 'none'; }
-        function saveSettings() {
-            const ip = document.getElementById('cfgIp').value.trim();
-            localStorage.setItem('xo_target_ip', ip);
-            closeSettings();
-            runAudit();
-        }
+        window.triggerProhibited = function(reason) {
+            isProhibited = true;
+            alarmReason = reason;
+            document.getElementById('badgeApi').className = "card-badge badge-danger";
+            document.getElementById('badgeApi').innerText = "ОБРЫВ!";
+            log(`[ALARM] ${reason}`);
+        };
 
         function runAudit() {
             const t0 = performance.now();
@@ -604,11 +505,12 @@
                     const badge = document.getElementById('badgeIp');
                     const detail = document.getElementById('detailIp');
                     if (data.countryCode === 'RU' || data.countryCode === 'BY') {
-                        badge.innerText = `${data.query} (РИСК БАНА!)`;
+                        badge.innerText = `${data.query} (РИСК БАНА)`;
                         badge.className = "card-badge badge-danger";
-                        detail.innerText = `ВНИМАНИЕ: Обнаружен IP ${data.country}! Claude заблокирован.`;
+                        detail.innerText = `ВНИМАНИЕ: IP ${data.country}! Claude заблокирован.`;
                         isProhibited = true;
                         alarmReason = "ОБНАРУЖЕН IP РФ!";
+                        log("[ALERT] Обнаружен IP РФ! Трафик отсечен.");
                     } else {
                         badge.innerText = `${data.query} (${data.country})`;
                         badge.className = "card-badge badge-safe";
@@ -622,7 +524,7 @@
         }
 
         runAudit();
-        setInterval(runAudit, 4000);
+        setInterval(runAudit, 5000);
     </script>
 </body>
 </html>

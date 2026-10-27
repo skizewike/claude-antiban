@@ -70,7 +70,7 @@ def build():
         for jf in java_files:
             f.write(jf.replace("\\", "/") + "\n")
 
-    cmd_javac = f'"{JAVAC}" -cp "{ANDROID_JAR}" -d "{bin_dir}" --release 8 @"sources.txt"'
+    cmd_javac = f'"{JAVAC}" -encoding UTF-8 -cp "{ANDROID_JAR}" -d "{bin_dir}" --release 8 @"sources.txt"'
     run_cmd(f'cd /d "{BUILD_DIR}" && {cmd_javac}', "Compile Java Sources (Java 8 bytecode)")
 
     # 4. Convert classes to DEX with D8

@@ -11,6 +11,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.os.Vibrator;
 import android.provider.Settings;
 import android.webkit.JavascriptInterface;
@@ -60,7 +61,7 @@ public class MainActivity extends Activity {
             public void run() {
                 while (isMonitoring) {
                     try {
-                        Thread.sleep(1000);
+                        Thread.sleep(1200);
                     } catch (InterruptedException ignored) {}
 
                     final boolean vpnActive = isVpnActive();
@@ -77,7 +78,7 @@ public class MainActivity extends Activity {
                         consecutiveFails = 0;
                     } else {
                         consecutiveFails++;
-                        if (consecutiveFails >= 3) {
+                        if (consecutiveFails >= 2) {
                             final String reason = !vpnActive ? "VPN отключился или оборвался!" : "Обрыв связи с серверами Claude!";
                             handler.post(new Runnable() {
                                 @Override
@@ -95,15 +96,11 @@ public class MainActivity extends Activity {
     private boolean isVpnActive() {
         try {
             ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-            if (cm != null) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    Network activeNet = cm.getActiveNetwork();
-                    if (activeNet != null) {
-                        NetworkCapabilities caps = cm.getNetworkCapabilities(activeNet);
-                        if (caps != null) {
-                            return caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN);
-                        }
-                    }
+            if (cm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Network activeNet = cm.getActiveNetwork();
+                if (activeNet != null) {
+                    NetworkCapabilities caps = cm.getNetworkCapabilities(activeNet);
+                    return caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN);
                 }
             }
         } catch (Exception ignored) {}
@@ -154,6 +151,71 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://claude.ai"));
                 startActivity(browserIntent);
+            }
+        }
+
+        @JavascriptInterface
+        public boolean isOverlayPermitted() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                return Settings.canDrawOverlays(MainActivity.this);
+            }
+            return true;
+        }
+
+        @JavascriptInterface
+        public void requestOverlayPermission() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (!Settings.canDrawOverlays(MainActivity.this)) {
+                    Intent intent = new Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName())
+                    );
+                    startActivity(intent);
+                    showToast("Включите разрешение «Поверх других приложений» для Project XO");
+                } else {
+                    showToast("Разрешение «Поверх других приложений» уже предоставлено!");
+                }
+            }
+        }
+
+        @JavascriptInterface
+        public void toggleSmartOverlay(boolean enable) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(MainActivity.this)) {
+                requestOverlayPermission();
+                return;
+            }
+            Intent serviceIntent = new Intent(MainActivity.this, FloatingGuardService.class);
+            if (enable) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent);
+                } else {
+                    startService(serviceIntent);
+                }
+                showToast("Умный режим защиты (поверх всех окон) ВКЛЮЧЕН");
+            } else {
+                stopService(serviceIntent);
+                showToast("Умный режим защиты ВЫКЛЮЧЕН");
+            }
+        }
+
+        @JavascriptInterface
+        public void requestBatteryOptimizationExemption() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                try {
+                    PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                    if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                        Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                        intent.setData(Uri.parse("package:" + getPackageName()));
+                        startActivity(intent);
+                    } else {
+                        showToast("Оптимизация батареи уже отключена для постоянной защиты!");
+                    }
+                } catch (Exception ex) {
+                    try {
+                        Intent intent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                        startActivity(intent);
+                    } catch (Exception ignored) {}
+                }
             }
         }
 
