@@ -23,7 +23,8 @@ namespace ProjectXO {
                     ProcessStartInfo psi = new ProcessStartInfo {
                         FileName = Application.ExecutablePath,
                         Verb = "runas",
-                        UseShellExecute = true
+                        UseShellExecute = true,
+                        WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
                     };
                     Process.Start(psi);
                     return;
@@ -454,18 +455,39 @@ namespace ProjectXO {
             BuildUI();
             SetupTray();
 
-            Log("SYSTEM", "Барьер запущен с правами администратора. Служба ядра WFP готова к работе.", Color.FromArgb(204, 120, 92));
-
-            // Первоначальный аудит
-            StartAudit();
-
-            // Фоновый сторож
-            StartWatchdog();
+            Shown += (s, e) => {
+                Log("SYSTEM", "Барьер запущен с правами администратора. Служба ядра WFP готова к работе.", Color.FromArgb(204, 120, 92));
+                StartAudit();
+                StartWatchdog();
+            };
 
             if (args != null && Array.IndexOf(args, "--minimized") >= 0) {
                 WindowState = FormWindowState.Minimized;
                 ShowInTaskbar = false;
             }
+        }
+
+        private void SafeInvoke(Action action) {
+            try {
+                if (IsDisposed || Disposing) return;
+                if (!IsHandleCreated) {
+                    EventHandler onHandle = null;
+                    onHandle = (s, e) => {
+                        HandleCreated -= onHandle;
+                        try {
+                            if (InvokeRequired) BeginInvoke(action);
+                            else action();
+                        } catch {}
+                    };
+                    HandleCreated += onHandle;
+                    return;
+                }
+                if (InvokeRequired) {
+                    BeginInvoke(action);
+                } else {
+                    action();
+                }
+            } catch {}
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e) {
@@ -480,33 +502,33 @@ namespace ProjectXO {
             }
         }
 
+        private static readonly object _logLock = new object();
         public void Log(string category, string message, Color color) {
-            if (InvokeRequired) {
-                BeginInvoke(new Action(() => Log(category, message, color)));
-                return;
-            }
-
             string timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
             string line = string.Format("[{0}] [{1}] {2}\n", timestamp, category, message);
 
-            if (_rtbLogs != null && !_rtbLogs.IsDisposed) {
-                _rtbLogs.SelectionStart = _rtbLogs.TextLength;
-                _rtbLogs.SelectionLength = 0;
-                _rtbLogs.SelectionColor = Color.FromArgb(113, 113, 122);
-                _rtbLogs.AppendText("[" + timestamp + "] ");
-
-                _rtbLogs.SelectionColor = color;
-                _rtbLogs.AppendText("[" + category + "] ");
-
-                _rtbLogs.SelectionColor = Color.FromArgb(244, 244, 245);
-                _rtbLogs.AppendText(message + "\n");
-                _rtbLogs.ScrollToCaret();
+            lock (_logLock) {
+                try {
+                    string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "project_xo.log");
+                    File.AppendAllText(logFile, line);
+                } catch {}
             }
 
-            try {
-                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "project_xo.log");
-                File.AppendAllText(logFile, line);
-            } catch {}
+            SafeInvoke(() => {
+                if (_rtbLogs != null && !_rtbLogs.IsDisposed) {
+                    _rtbLogs.SelectionStart = _rtbLogs.TextLength;
+                    _rtbLogs.SelectionLength = 0;
+                    _rtbLogs.SelectionColor = Color.FromArgb(113, 113, 122);
+                    _rtbLogs.AppendText("[" + timestamp + "] ");
+
+                    _rtbLogs.SelectionColor = color;
+                    _rtbLogs.AppendText("[" + category + "] ");
+
+                    _rtbLogs.SelectionColor = Color.FromArgb(244, 244, 245);
+                    _rtbLogs.AppendText(message + "\n");
+                    _rtbLogs.ScrollToCaret();
+                }
+            });
         }
 
         private void AutoDetectClaude() {
@@ -1256,114 +1278,118 @@ namespace ProjectXO {
             Log("AUDIT", "Запуск проверки сетевых интерфейсов и геолокации IP...", Color.FromArgb(161, 161, 170));
 
             ThreadPool.QueueUserWorkItem((state) => {
-                bool isRuIp = false;
-                string ipStr = "Ожидание";
-                string countryStr = "Неизвестно";
-
-                // 1. Проверка внешнего IP и страны
                 try {
-                    using (WebClient wc = new WebClient()) {
-                        wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/5.0";
-                        string json = wc.DownloadString("http://ip-api.com/json");
-                        if (json.Contains("\"countryCode\":\"RU\"") || json.Contains("\"countryCode\":\"BY\"")) {
-                            isRuIp = true;
-                            countryStr = json.Contains("\"countryCode\":\"RU\"") ? "Россия" : "Беларусь";
+                    bool isRuIp = false;
+                    string ipStr = "Ожидание";
+                    string countryStr = "Неизвестно";
+
+                    // 1. Проверка внешнего IP и страны
+                    try {
+                        using (WebClient wc = new WebClient()) {
+                            wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/5.0";
+                            string json = wc.DownloadString("http://ip-api.com/json");
+                            if (json.Contains("\"countryCode\":\"RU\"") || json.Contains("\"countryCode\":\"BY\"")) {
+                                isRuIp = true;
+                                countryStr = json.Contains("\"countryCode\":\"RU\"") ? "Россия" : "Беларусь";
+                            } else {
+                                int qIdx = json.IndexOf("\"query\":\"");
+                                if (qIdx > 0) {
+                                    int endQ = json.IndexOf("\"", qIdx + 9);
+                                    if (endQ > 0) ipStr = json.Substring(qIdx + 9, endQ - (qIdx + 9));
+                                }
+                                int cIdx = json.IndexOf("\"country\":\"");
+                                if (cIdx > 0) {
+                                    int endC = json.IndexOf("\"", cIdx + 11);
+                                    if (endC > 0) countryStr = json.Substring(cIdx + 11, endC - (cIdx + 11));
+                                }
+                            }
+                        }
+                    } catch {
+                        isRuIp = true; // При ошибке считаем небезопасным
+                    }
+
+                    // 2. Проверка наличия активного туннеля VPN
+                    bool vpnActive = false;
+                    try {
+                        foreach (NetworkInterface nic in NetworkInterface.GetAllNetworkInterfaces()) {
+                            if (nic.OperationalStatus == OperationalStatus.Up) {
+                                string desc = nic.Description.ToLowerInvariant();
+                                string name = nic.Name.ToLowerInvariant();
+                                if (desc.Contains("wintun") || desc.Contains("wireguard") || desc.Contains("tap") ||
+                                    desc.Contains("tun") || name.Contains("wwan99") || name.Contains("vpn")) {
+                                    vpnActive = true;
+                                    break;
+                                }
+                            }
+                        }
+                    } catch {}
+
+                    // 3. Проверка отклика api.anthropic.com
+                    int pingMs = 0;
+                    try {
+                        Stopwatch sw = Stopwatch.StartNew();
+                        HttpWebRequest req = (HttpWebRequest)WebRequest.Create("https://api.anthropic.com");
+                        req.Timeout = 3500;
+                        req.Method = "GET";
+                        req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+                        using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) {
+                            sw.Stop();
+                            pingMs = (int)sw.ElapsedMilliseconds;
+                        }
+                    } catch (WebException we) {
+                        if (we.Response is HttpWebResponse) {
+                            pingMs = 28; // Штатный ответ шлюза Cloudflare
+                        }
+                    }
+
+                    // 4. Проверка правил Брандмауэра напрямую через системный реестр (0 консолей!)
+                    int fwRulesCount = GetFirewallRuleCountFromRegistry();
+
+                    // 5. Итоговое обновление интерфейса
+                    SafeInvoke(() => {
+                        _canvas.PingMs = pingMs;
+                        _canvas.ExternalIp = ipStr;
+                        _canvas.Country = countryStr;
+
+                        if (isRuIp || !vpnActive) {
+                            // ОПАСНОСТЬ: ВХОД ЗАПРЕЩЕН
+                            string reason = isRuIp
+                                ? ("Обнаружен IP адрес " + countryStr + " (прямой риск бана аккаунта)")
+                                : "Адаптер VPN не подключен или соединение разорвано";
+
+                            SetProtectionUIState(ProtectionState.BlockedNoVpn, reason);
+                            UpdateCard(_cardIp, "Риск бана (" + countryStr + ")", Color.FromArgb(248, 113, 113), Color.FromArgb(38, 20, 22),
+                                "Текущий IP: " + ipStr + " (" + countryStr + "). Доступ к Claude заблокирован.");
+                            Log("SECURITY", "Аудит завершен: IP адрес " + countryStr + ". Вход в Claude ЗАБЛОКИРОВАН.", Color.FromArgb(248, 113, 113));
                         } else {
-                            int qIdx = json.IndexOf("\"query\":\"");
-                            if (qIdx > 0) {
-                                int endQ = json.IndexOf("\"", qIdx + 9);
-                                if (endQ > 0) ipStr = json.Substring(qIdx + 9, endQ - (qIdx + 9));
-                            }
-                            int cIdx = json.IndexOf("\"country\":\"");
-                            if (cIdx > 0) {
-                                int endC = json.IndexOf("\"", cIdx + 11);
-                                if (endC > 0) countryStr = json.Substring(cIdx + 11, endC - (cIdx + 11));
-                            }
+                            // БЕЗОПАСНО: ДОСТУП РАЗРЕШЕН
+                            SetProtectionUIState(ProtectionState.Protected, "Защита активна");
+                            UpdateCard(_cardIp, ipStr + " (" + countryStr + ")", Color.FromArgb(204, 120, 92), Color.FromArgb(38, 28, 24),
+                                "Внешний адрес: " + ipStr + " (" + countryStr + "). Трафик полностью туннелирован.");
+                            Log("SECURITY", "Аудит завершен: туннель активен (" + countryStr + "). Безопасный запуск Claude РАЗРЕШЕН.", Color.FromArgb(204, 120, 92));
                         }
-                    }
-                } catch {
-                    isRuIp = true; // При ошибке считаем небезопасным
-                }
 
-                // 2. Проверка наличия активного туннеля VPN
-                bool vpnActive = false;
-                try {
-                    foreach (NetworkInterface nic in NetworkInterface.GetAllNetworkInterfaces()) {
-                        if (nic.OperationalStatus == OperationalStatus.Up) {
-                            string desc = nic.Description.ToLowerInvariant();
-                            string name = nic.Name.ToLowerInvariant();
-                            if (desc.Contains("wintun") || desc.Contains("wireguard") || desc.Contains("tap") ||
-                                desc.Contains("tun") || name.Contains("wwan99") || name.Contains("vpn")) {
-                                vpnActive = true;
-                                break;
-                            }
+                        // Обновление карточки брандмауэра
+                        if (fwRulesCount > 0) {
+                            UpdateCard(_cardFirewall, "Активен (" + fwRulesCount + " правил)", Color.FromArgb(204, 120, 92), Color.FromArgb(38, 28, 24),
+                                "Ядро WFP изолирует подсети 160.79.104.0/23 на физических картах.");
+                        } else {
+                            UpdateCard(_cardFirewall, "Требуется установка", Color.FromArgb(248, 113, 113), Color.FromArgb(38, 20, 22),
+                                "Правила изоляции еще не внедрены. Нажмите «Применить правила».");
                         }
-                    }
-                } catch {}
 
-                // 3. Проверка отклика api.anthropic.com
-                int pingMs = 0;
-                try {
-                    Stopwatch sw = Stopwatch.StartNew();
-                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create("https://api.anthropic.com");
-                    req.Timeout = 3500;
-                    req.Method = "GET";
-                    req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
-                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) {
-                        sw.Stop();
-                        pingMs = (int)sw.ElapsedMilliseconds;
-                    }
-                } catch (WebException we) {
-                    if (we.Response is HttpWebResponse) {
-                        pingMs = 28; // Штатный ответ шлюза Cloudflare
-                    }
+                        // Обновление карточки Cloudflare
+                        if (pingMs > 0) {
+                            UpdateCard(_cardCloudflare, "Доступен (" + pingMs + " мс)", Color.FromArgb(204, 120, 92), Color.FromArgb(38, 28, 24),
+                                "Шлюз api.anthropic.com отвечает штатно по протоколу TLS 1.2/1.3.");
+                        } else {
+                            UpdateCard(_cardCloudflare, "Таймаут", Color.FromArgb(248, 113, 113), Color.FromArgb(38, 20, 22),
+                                "Серверы Anthropic не отвечают. Проверьте активность туннеля.");
+                        }
+                    });
+                } catch (Exception ex) {
+                    Log("ERR", "Ошибка выполнения аудита: " + ex.Message, Color.FromArgb(239, 68, 68));
                 }
-
-                // 4. Проверка правил Брандмауэра напрямую через системный реестр (0 консолей!)
-                int fwRulesCount = GetFirewallRuleCountFromRegistry();
-
-                // 5. Итоговое обновление интерфейса
-                BeginInvoke(new Action(() => {
-                    _canvas.PingMs = pingMs;
-                    _canvas.ExternalIp = ipStr;
-                    _canvas.Country = countryStr;
-
-                    if (isRuIp || !vpnActive) {
-                        // ОПАСНОСТЬ: ВХОД ЗАПРЕЩЕН
-                        string reason = isRuIp
-                            ? ("Обнаружен IP адрес " + countryStr + " (прямой риск бана аккаунта)")
-                            : "Адаптер VPN не подключен или соединение разорвано";
-
-                        SetProtectionUIState(ProtectionState.BlockedNoVpn, reason);
-                        UpdateCard(_cardIp, "Риск бана (" + countryStr + ")", Color.FromArgb(248, 113, 113), Color.FromArgb(38, 20, 22),
-                            "Текущий IP: " + ipStr + " (" + countryStr + "). Доступ к Claude заблокирован.");
-                        Log("SECURITY", "Аудит завершен: IP адрес " + countryStr + ". Вход в Claude ЗАБЛОКИРОВАН.", Color.FromArgb(248, 113, 113));
-                    } else {
-                        // БЕЗОПАСНО: ДОСТУП РАЗРЕШЕН
-                        SetProtectionUIState(ProtectionState.Protected, "Защита активна");
-                        UpdateCard(_cardIp, ipStr + " (" + countryStr + ")", Color.FromArgb(204, 120, 92), Color.FromArgb(38, 28, 24),
-                            "Внешний адрес: " + ipStr + " (" + countryStr + "). Трафик полностью туннелирован.");
-                        Log("SECURITY", "Аудит завершен: туннель активен (" + countryStr + "). Безопасный запуск Claude РАЗРЕШЕН.", Color.FromArgb(204, 120, 92));
-                    }
-
-                    // Обновление карточки брандмауэра
-                    if (fwRulesCount > 0) {
-                        UpdateCard(_cardFirewall, "Активен (" + fwRulesCount + " правил)", Color.FromArgb(204, 120, 92), Color.FromArgb(38, 28, 24),
-                            "Ядро WFP изолирует подсети 160.79.104.0/23 на физических картах.");
-                    } else {
-                        UpdateCard(_cardFirewall, "Требуется установка", Color.FromArgb(248, 113, 113), Color.FromArgb(38, 20, 22),
-                            "Правила изоляции еще не внедрены. Нажмите «Применить правила».");
-                    }
-
-                    // Обновление карточки Cloudflare
-                    if (pingMs > 0) {
-                        UpdateCard(_cardCloudflare, "Доступен (" + pingMs + " мс)", Color.FromArgb(204, 120, 92), Color.FromArgb(38, 28, 24),
-                            "Шлюз api.anthropic.com отвечает штатно по протоколу TLS 1.2/1.3.");
-                    } else {
-                        UpdateCard(_cardCloudflare, "Таймаут", Color.FromArgb(248, 113, 113), Color.FromArgb(38, 20, 22),
-                            "Серверы Anthropic не отвечают. Проверьте активность туннеля.");
-                    }
-                }));
             });
         }
 
@@ -1422,9 +1448,9 @@ namespace ProjectXO {
                         // Аварийное чистое уничтожение процессов Claude в памяти без taskkill и консолей!
                         KillClaudeProcessesInMemory();
 
-                        BeginInvoke(new Action(() => {
+                        SafeInvoke(() => {
                             SetProtectionUIState(ProtectionState.BlockedLeaking, "Аварийный сброс: VPN-туннель был разорван!");
-                        }));
+                        });
                         Log("KILLSWITCH", "Аварийный перехват: туннель разорван во время работы. Процессы Claude завершены в памяти.", Color.FromArgb(248, 113, 113));
                     }
                 });
@@ -1498,15 +1524,15 @@ namespace ProjectXO {
                     Process proc = Process.Start(psi);
                     proc.WaitForExit();
 
-                    BeginInvoke(new Action(() => {
+                    SafeInvoke(() => {
                         Log("WFP", "Правила ядра успешно применены. Сеть защищена от утечек.", Color.FromArgb(204, 120, 92));
                         StartAudit();
                         MessageBox.Show("Правила аппаратной изоляции WFP успешно применены.", "Claude Anti-Ban Barrier", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    }));
+                    });
                 } catch (Exception ex) {
-                    BeginInvoke(new Action(() => {
+                    SafeInvoke(() => {
                         Log("ERR", "Ошибка установки правил WFP: " + ex.Message, Color.FromArgb(239, 68, 68));
-                    }));
+                    });
                 }
             });
         }
