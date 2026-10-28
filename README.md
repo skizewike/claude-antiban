@@ -1,10 +1,10 @@
 # Claude Anti-Ban Barrier (Project XO)
 
 Разработчик: Bogdan Zhukov  
-Версия: 5.0.0  
-Архитектура: Windows (WFP / .NET WinForms) + Android (Standalone APK)
+Версия: 5.1.0  
+Архитектура: Windows (WFP / .NET WinForms / Cloudflare Zero-Trust Dark UI) + Android (Standalone APK)
 
-Инженерное решение для изоляции сетевого трафика и предотвращения блокировок учетных записей Anthropic Claude (Desktop, Web, Code CLI) по географическому признаку (РФ / РБ).
+Инженерное решение для изоляции сетевого трафика и предотвращения блокировок учетных записей Anthropic Claude (Desktop, Web, Code CLI) по географическому признаку (РФ / РБ). Оформлено в премиальном темном интерфейсе Cloudflare One с живой векторной телеметрией и кастомным системным значком с запрещающим знаком.
 
 ---
 
