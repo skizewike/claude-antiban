@@ -119,7 +119,6 @@ build.bat
 ## 🤖 Бот поддержки и ключей
 
 * Официальный Telegram-бот: [**@ClaudeBarrierBot**](https://t.me/ClaudeBarrierBot)
-* Исходный код бота: каталог `bot/` в репозитории.
-* GitHub Issues: [skizewike/claude-antiban/issues](https://github.com/skizewike/claude-antiban/issues)
+
 
 Лицензия: [MIT](LICENSE) © 2026 ClaudeBarrier Security Team.
