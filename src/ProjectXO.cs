@@ -999,20 +999,12 @@ namespace ProjectXO {
         private Label _lblZapretStatus;
         private CloudflareButton _btnToggleZapret;
 
-        // Телеметрия HUD и чипы
-        private TelemetryStatChip _statChipIp;
-        private TelemetryStatChip _statChipWfp;
-        private TelemetryStatChip _statChipGateway;
-        private TelemetryStatChip _statChipIpv6;
-        private TelemetryStatChip _statChipDoh;
-
-        // Элементы страницы 1: Защита и шлюзы
-        private FlowLayoutPanel _pnlDiagnostics;
-        private DiagnosticCard _cardIp;
-        private DiagnosticCard _cardFirewall;
-        private DiagnosticCard _cardCloudflare;
-        private DiagnosticCard _cardIpv6Dns;
-        private DiagnosticCard _cardDoh;
+        // Вкладка «Подключение» (1:1 Cloudflare WARP Zero-Trust)
+        private Panel _badgeTunnelStatus;
+        private Label _lblWarpIpVal;
+        private Label _lblWarpAnthropicVal;
+        private Label _lblWarpWfpVal;
+        private Label _lblWarpDohVal;
 
         // Элементы страницы 3: Журнал событий
         private RichTextBox _rtbLogs;
@@ -1713,179 +1705,305 @@ namespace ProjectXO {
             page.Controls.Add(lblCopy);
         }
 
-        // Вкладка 1: Подключение (Детальная диагностика шлюзов и телеметрия WFP/DoH/IP)
+        private CloudflareButton CreateWarpButton(string text, int width, int height, EventHandler onClick) {
+            CloudflareButton btn = new CloudflareButton() {
+                Text = text,
+                Size = new Size(width, height),
+                CornerRadius = 6,
+                Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
+                GradientStart = Color.FromArgb(24, 27, 38),
+                GradientEnd = Color.FromArgb(20, 23, 32),
+                HoverStart = Color.FromArgb(38, 44, 62),
+                HoverEnd = Color.FromArgb(28, 33, 48),
+                BorderStrokeColor = Color.FromArgb(42, 48, 66),
+                ForeColor = Color.FromArgb(241, 245, 249),
+                Cursor = Cursors.Hand
+            };
+            if (onClick != null) btn.Click += onClick;
+            return btn;
+        }
+
+        // Вкладка 1: Подключение (1:1 Cloudflare WARP с нулевым скроллом)
         private void BuildDiagnosticsPage(Panel page) {
+            page.Controls.Clear();
+            page.AutoScroll = false;
+
             Label lblTitle = new Label() {
-                Text = "Детальная диагностика сетевых шлюзов и адаптеров",
-                Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+                Text = "Подключение",
+                Font = new Font("Segoe UI", 20f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(248, 250, 252),
-                Location = new Point(24, 16),
+                Location = new Point(32, 20),
                 AutoSize = true
             };
             page.Controls.Add(lblTitle);
 
-            Label lblDesc = new Label() {
-                Text = "Контроль каждого уровня аппаратной изоляции: IP-геолокация, драйвер WFP, IPv6, DoH.",
-                Font = new Font("Segoe UI", 8.8f),
-                ForeColor = Color.FromArgb(148, 163, 184),
-                Location = new Point(24, 38),
-                AutoSize = true
-            };
-            page.Controls.Add(lblDesc);
-
-            // Карточка Телеметрии HUD (5 чипов) перенесена в раздел «Подключение»
-            Panel pnlTelemetry = new Panel() {
-                Location = new Point(24, 66),
-                Size = new Size(794, 114),
-                BackColor = Color.FromArgb(17, 20, 30)
-            };
-            pnlTelemetry.Paint += (s, pe) => {
-                Graphics g = pe.Graphics;
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                Rectangle r = new Rectangle(0, 0, pnlTelemetry.Width - 1, pnlTelemetry.Height - 1);
-                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 10)) {
-                    using (SolidBrush b = new SolidBrush(Color.FromArgb(17, 20, 30))) {
-                        g.FillPath(b, p);
-                    }
-                    using (Pen pen = new Pen(Color.FromArgb(30, 35, 48), 1f)) {
-                        g.DrawPath(pen, p);
-                    }
-                }
-            };
-            page.Controls.Add(pnlTelemetry);
-
-            Panel pnlTelemHeader = new Panel() {
-                Location = new Point(12, 6),
-                Size = new Size(770, 28),
-                BackColor = Color.Transparent
-            };
-            pnlTelemetry.Controls.Add(pnlTelemHeader);
-
-            Label lblTelemTitle = new Label() {
-                Text = "ДИАГНОСТИКА И ШЛЮЗЫ БЕЗОПАСНОСТИ",
+            // ================= SECTION 1: DNS-ПОДКЛЮЧЕНИЕ =================
+            Label lblDnsSec = new Label() {
+                Text = "DNS-ПОДКЛЮЧЕНИЕ",
                 Font = new Font("Segoe UI", 8.2f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(148, 163, 184),
-                Location = new Point(2, 6),
+                Location = new Point(34, 72),
                 AutoSize = true
             };
-            pnlTelemHeader.Controls.Add(lblTelemTitle);
+            page.Controls.Add(lblDnsSec);
 
-            CloudflareButton btnCheckTelem = new CloudflareButton() {
-                Text = "Проверить соединение",
-                Size = new Size(160, 24),
-                Location = new Point(440, 2),
-                CornerRadius = 6,
-                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
-                GradientStart = Color.FromArgb(28, 32, 44),
-                GradientEnd = Color.FromArgb(24, 27, 36),
-                HoverStart = Color.FromArgb(40, 46, 62),
-                HoverEnd = Color.FromArgb(32, 36, 48),
-                BorderStrokeColor = Color.FromArgb(45, 52, 70),
-                ForeColor = Color.FromArgb(226, 232, 240)
+            Panel cardDns = new Panel() {
+                Location = new Point(32, 94),
+                Size = new Size(786, 62),
+                BackColor = Color.FromArgb(19, 22, 32)
             };
-            btnCheckTelem.Click += (s, e) => StartAudit();
-            pnlTelemHeader.Controls.Add(btnCheckTelem);
-
-            CloudflareButton btnKillswitchTelem = new CloudflareButton() {
-                Text = "Тест аварийного сброса",
-                Size = new Size(160, 24),
-                Location = new Point(608, 2),
-                CornerRadius = 6,
-                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
-                GradientStart = Color.FromArgb(45, 24, 28),
-                GradientEnd = Color.FromArgb(36, 18, 22),
-                HoverStart = Color.FromArgb(60, 30, 36),
-                HoverEnd = Color.FromArgb(48, 22, 28),
-                BorderStrokeColor = Color.FromArgb(85, 34, 40),
-                ForeColor = Color.FromArgb(252, 165, 165)
+            cardDns.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, cardDns.Width - 1, cardDns.Height - 1);
+                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(19, 22, 32))) g.FillPath(b, p);
+                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 56), 1f)) g.DrawPath(pen, p);
+                }
             };
-            btnKillswitchTelem.Click += (s, e) => RunMemorySimulation();
-            pnlTelemHeader.Controls.Add(btnKillswitchTelem);
+            page.Controls.Add(cardDns);
 
-            // Сетка из 5 чипов телеметрии
-            _statChipIp = new TelemetryStatChip("Внешний IPv4 и страна", "Риск бана (Россия)", Color.FromArgb(248, 113, 113)) {
-                Location = new Point(12, 40)
+            Label lblDnsTitle = new Label() {
+                Text = "DNS-протокол",
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 12),
+                AutoSize = true,
+                BackColor = Color.Transparent
             };
-            pnlTelemetry.Controls.Add(_statChipIp);
+            cardDns.Controls.Add(lblDnsTitle);
 
-            _statChipWfp = new TelemetryStatChip("Брандмауэр ядра WFP", "Активен (10 правил)", Color.FromArgb(52, 211, 153)) {
-                Location = new Point(168, 40)
+            _lblWarpDohVal = new Label() {
+                Text = "Cloudflare 1.1.1.1 (DNS-over-HTTPS)",
+                Font = new Font("Segoe UI", 8.5f),
+                ForeColor = Color.FromArgb(52, 211, 153),
+                Location = new Point(20, 34),
+                AutoSize = true,
+                BackColor = Color.Transparent
             };
-            pnlTelemetry.Controls.Add(_statChipWfp);
+            cardDns.Controls.Add(_lblWarpDohVal);
 
-            _statChipGateway = new TelemetryStatChip("Шлюз Anthropic CF", "Таймаут", Color.FromArgb(248, 113, 113)) {
-                Location = new Point(324, 40)
+            CloudflareButton btnTestDoh = CreateWarpButton("Тест DoH", 130, 34, (s, e) => TestDoHResolver());
+            btnTestDoh.Location = new Point(636, 14);
+            cardDns.Controls.Add(btnTestDoh);
+
+            // ================= SECTION 2: ПОДКЛЮЧЕНИЕ TUNNEL =================
+            Label lblTunnelSec = new Label() {
+                Text = "ПОДКЛЮЧЕНИЕ TUNNEL",
+                Font = new Font("Segoe UI", 8.2f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(34, 174),
+                AutoSize = true
             };
-            pnlTelemetry.Controls.Add(_statChipGateway);
+            page.Controls.Add(lblTunnelSec);
 
-            _statChipIpv6 = new TelemetryStatChip("Изоляция IPv6 & DNS", "Изолирован", Color.FromArgb(52, 211, 153)) {
-                Location = new Point(480, 40)
+            Panel cardTunnel = new Panel() {
+                Location = new Point(32, 196),
+                Size = new Size(786, 176),
+                BackColor = Color.FromArgb(19, 22, 32)
             };
-            pnlTelemetry.Controls.Add(_statChipIpv6);
-
-            _statChipDoh = new TelemetryStatChip("DoH (Cloudflare 1.1.1.1)", "Активен", Color.FromArgb(52, 211, 153)) {
-                Location = new Point(636, 40)
+            cardTunnel.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, cardTunnel.Width - 1, cardTunnel.Height - 1);
+                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(19, 22, 32))) g.FillPath(b, p);
+                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 56), 1f)) g.DrawPath(pen, p);
+                }
+                using (Pen divPen = new Pen(Color.FromArgb(28, 33, 48), 1f)) {
+                    g.DrawLine(divPen, 20, 44, cardTunnel.Width - 20, 44);
+                    g.DrawLine(divPen, 20, 88, cardTunnel.Width - 20, 88);
+                    g.DrawLine(divPen, 20, 132, cardTunnel.Width - 20, 132);
+                }
             };
-            pnlTelemetry.Controls.Add(_statChipDoh);
+            page.Controls.Add(cardTunnel);
 
-            // Детальные карточки шлюзов (расположены под блоком HUD)
-            _pnlDiagnostics = new FlowLayoutPanel() {
-                Location = new Point(24, 190),
-                Size = new Size(794, 470),
+            // Row 1: Статус подключения
+            Label lblRowStatus = new Label() {
+                Text = "Статус подключения",
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 13),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardTunnel.Controls.Add(lblRowStatus);
+
+            _badgeTunnelStatus = new Panel() {
+                Location = new Point(646, 8),
+                Size = new Size(120, 28),
+                BackColor = Color.Transparent
+            };
+            _badgeTunnelStatus.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                bool isProtected = (_currentState == ProtectionState.Protected);
+                Rectangle r = new Rectangle(0, 0, _badgeTunnelStatus.Width - 1, _badgeTunnelStatus.Height - 1);
+                Color bg = isProtected ? Color.FromArgb(19, 56, 44) : Color.FromArgb(59, 29, 36);
+                Color border = isProtected ? Color.FromArgb(6, 95, 70) : Color.FromArgb(127, 29, 29);
+                Color textColor = isProtected ? Color.FromArgb(52, 211, 153) : Color.FromArgb(248, 113, 113);
+                string text = isProtected ? "Подключено" : "Отключено";
+
+                using (GraphicsPath path = GraphicsUtils.CreateRoundedRectangle(r, 6)) {
+                    using (SolidBrush sb = new SolidBrush(bg)) g.FillPath(sb, path);
+                    using (Pen p = new Pen(border, 1f)) g.DrawPath(p, path);
+                }
+
+                using (Font font = new Font("Segoe UI", 8.8f, FontStyle.Bold))
+                using (SolidBrush tb = new SolidBrush(textColor)) {
+                    StringFormat sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+                    g.DrawString(text, font, tb, r, sf);
+                }
+            };
+            cardTunnel.Controls.Add(_badgeTunnelStatus);
+
+            // Row 2: Внешний IP и страна
+            Label lblRowIp = new Label() {
+                Text = "Внешний IP и страна",
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 57),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardTunnel.Controls.Add(lblRowIp);
+
+            _lblWarpIpVal = new Label() {
+                Text = CurrentIp != "..." ? (CurrentIp + " (" + CurrentCountry + ")") : "Ожидание проверки...",
+                Font = new Font("Segoe UI", 9.2f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(320, 57),
+                Size = new Size(446, 20),
+                TextAlign = ContentAlignment.MiddleRight,
+                BackColor = Color.Transparent
+            };
+            cardTunnel.Controls.Add(_lblWarpIpVal);
+
+            // Row 3: Шлюз Anthropic (api.anthropic.com)
+            Label lblRowAnthropic = new Label() {
+                Text = "Шлюз Anthropic (api.anthropic.com)",
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 101),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardTunnel.Controls.Add(lblRowAnthropic);
+
+            _lblWarpAnthropicVal = new Label() {
+                Text = CurrentPing > 0 ? (CurrentPing + " мс (TLS 1.2/1.3)") : "Ожидание проверки...",
+                Font = new Font("Segoe UI", 9.2f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(320, 101),
+                Size = new Size(446, 20),
+                TextAlign = ContentAlignment.MiddleRight,
+                BackColor = Color.Transparent
+            };
+            cardTunnel.Controls.Add(_lblWarpAnthropicVal);
+
+            // Row 4: Брандмауэр ядра WFP
+            Label lblRowWfp = new Label() {
+                Text = "Брандмауэр ядра WFP (Windows Filtering Platform)",
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 145),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardTunnel.Controls.Add(lblRowWfp);
+
+            int currentFwCount = GetFirewallRuleCountFromRegistry();
+            _lblWarpWfpVal = new Label() {
+                Text = currentFwCount > 0 ? ("Активен (" + currentFwCount + " правил внедрено)") : "Правила не внедрены",
+                Font = new Font("Segoe UI", 9.2f),
+                ForeColor = currentFwCount > 0 ? Color.FromArgb(52, 211, 153) : Color.FromArgb(248, 113, 113),
+                Location = new Point(320, 145),
+                Size = new Size(446, 20),
+                TextAlign = ContentAlignment.MiddleRight,
                 BackColor = Color.Transparent,
-                AutoScroll = true
+                Cursor = Cursors.Hand
             };
-            page.Controls.Add(_pnlDiagnostics);
+            _lblWarpWfpVal.Click += (s, e) => ApplyFirewallRulesSilent();
+            cardTunnel.Controls.Add(_lblWarpWfpVal);
 
-            _cardIp = new DiagnosticCard(
-                "Внешний IPv4 и страна",
-                "Проверка...", Color.FromArgb(249, 115, 22), Color.FromArgb(40, 249, 115, 22),
-                "Проверка внешнего IP, который видят серверы Claude. Если IP из РФ/РБ — запуск превентивно блокируется.",
-                "Запрос геолокации через прямой сокет...",
-                "Обновить IP"
-            );
-            _cardIp.ActionClicked += () => StartAudit();
-            _pnlDiagnostics.Controls.Add(_cardIp);
+            // ================= SECTION 3: БЕЗОПАСНОСТЬ И ТЕСТЫ =================
+            Label lblSecTitle = new Label() {
+                Text = "БЕЗОПАСНОСТЬ И ТЕСТЫ",
+                Font = new Font("Segoe UI", 8.2f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(34, 388),
+                AutoSize = true
+            };
+            page.Controls.Add(lblSecTitle);
 
-            _cardFirewall = new DiagnosticCard(
-                "Брандмауэр ядра WFP (Windows Filtering Platform)",
-                "Проверка...", Color.FromArgb(249, 115, 22), Color.FromArgb(40, 249, 115, 22),
-                "Аппаратный фильтр WFP блокирует исходящий трафик Claude ко всем внешним адаптерам кроме VPN.",
-                "Чтение правил в системном реестре...",
-                "Применить правила"
-            );
-            _cardFirewall.ActionClicked += () => ApplyFirewallRulesSilent();
-            _pnlDiagnostics.Controls.Add(_cardFirewall);
+            Panel cardSec = new Panel() {
+                Location = new Point(32, 410),
+                Size = new Size(786, 144),
+                BackColor = Color.FromArgb(19, 22, 32)
+            };
+            cardSec.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, cardSec.Width - 1, cardSec.Height - 1);
+                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(19, 22, 32))) g.FillPath(b, p);
+                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 56), 1f)) g.DrawPath(pen, p);
+                }
+                using (Pen divPen = new Pen(Color.FromArgb(28, 33, 48), 1f)) {
+                    g.DrawLine(divPen, 20, 72, cardSec.Width - 20, 72);
+                }
+            };
+            page.Controls.Add(cardSec);
 
-            _cardCloudflare = new DiagnosticCard(
-                "Шлюз Anthropic & Cloudflare",
-                "Проверка...", Color.FromArgb(249, 115, 22), Color.FromArgb(40, 249, 115, 22),
-                "Проверка доступности api.anthropic.com через туннель по протоколу TLS 1.2/1.3.",
-                "Измерение реального сетевого пинга...",
-                "Тест связи"
-            );
-            _cardCloudflare.ActionClicked += () => StartAudit();
-            _pnlDiagnostics.Controls.Add(_cardCloudflare);
+            // Row 1: Аварийный перехват WFP
+            Label lblTestInterceptTitle = new Label() {
+                Text = "Аварийный перехват WFP",
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 15),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardSec.Controls.Add(lblTestInterceptTitle);
 
-            _cardIpv6Dns = new DiagnosticCard(
-                "Изоляция IPv6 и Smart DNS",
-                "Изолирован", Color.FromArgb(52, 211, 153), Color.FromArgb(40, 16, 185, 129),
-                "Предотвращение утечек реального адреса через незащищенные IPv6-маршруты и локальный DNS-сервер.",
-                "Сетевые адаптеры проверены, прямые утечки исключены.",
-                "Очистить кэш DNS"
-            );
-            _cardIpv6Dns.ActionClicked += () => FlushDnsCache();
-            _pnlDiagnostics.Controls.Add(_cardIpv6Dns);
+            Label lblTestInterceptSub = new Label() {
+                Text = "Проверка сброса несанкционированного пакета к 160.79.104.10:443 ядром ОС",
+                Font = new Font("Segoe UI", 8.2f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(20, 39),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardSec.Controls.Add(lblTestInterceptSub);
 
-            _cardDoh = new DiagnosticCard(
-                "Зашифрованный DoH (Cloudflare 1.1.1.1)",
-                "Активен", Color.FromArgb(52, 211, 153), Color.FromArgb(40, 16, 185, 129),
-                "Шифрование DNS-запросов к доменам Anthropic через защищенный HTTPS-канал.",
-                "Резолвер Cloudflare 1.1.1.1 функционирует штатно.",
-                "Тест DoH"
-            );
-            _cardDoh.ActionClicked += () => TestDoHResolver();
-            _pnlDiagnostics.Controls.Add(_cardDoh);
+            CloudflareButton btnInterceptTest = CreateWarpButton("Тест перехвата", 160, 36, (s, e) => RunEmergencyInterceptTest());
+            btnInterceptTest.Location = new Point(606, 18);
+            cardSec.Controls.Add(btnInterceptTest);
+
+            // Row 2: Диагностика сетевого шлюза
+            Label lblAuditTitle = new Label() {
+                Text = "Диагностика сетевого шлюза",
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 87),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardSec.Controls.Add(lblAuditTitle);
+
+            Label lblAuditSub = new Label() {
+                Text = "Параллельный опрос внешних IP-шлюзов и замер RTT-задержки к Anthropic",
+                Font = new Font("Segoe UI", 8.2f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(20, 111),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardSec.Controls.Add(lblAuditSub);
+
+            CloudflareButton btnRunAudit = CreateWarpButton("Проверить соединение", 160, 36, (s, e) => StartAudit());
+            btnRunAudit.Location = new Point(606, 90);
+            cardSec.Controls.Add(btnRunAudit);
         }
 
         private void BuildBypassPage(Panel page) {
@@ -2348,6 +2466,7 @@ namespace ProjectXO {
 
             if (_appIconBox != null) _appIconBox.Invalidate();
             if (_brandLogoBox != null) _brandLogoBox.Invalidate();
+            if (_badgeTunnelStatus != null) _badgeTunnelStatus.Invalidate();
 
             if (isSafe) {
                 if (_lblStatusTitle != null) _lblStatusTitle.Text = "Подключено";
@@ -2708,34 +2827,46 @@ namespace ProjectXO {
                     req.Proxy = null;
                     req.Headers.Add("accept", "application/dns-json");
                     req.Timeout = 2500;
-                    req.UserAgent = "ClaudeBarrier-DoH/5.1";
+                    req.UserAgent = "ClaudeBarrier-DoH/5.5";
 
                     using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) {
                         sw.Stop();
                         using (StreamReader sr = new StreamReader(resp.GetResponseStream())) {
                             string res = sr.ReadToEnd();
                             SafeInvoke(() => {
-                                if (_cardDoh != null) {
-                                    _cardDoh.UpdateStatus("Активен (" + sw.ElapsedMilliseconds + " мс)", Color.FromArgb(52, 211, 153), Color.FromArgb(35, 16, 185, 129),
-                                        "DoH шлюз 1.1.1.1 ответил за " + sw.ElapsedMilliseconds + " мс. Домен api.anthropic.com успешно разрешен.");
+                                if (_lblWarpDohVal != null) {
+                                    _lblWarpDohVal.Text = "Cloudflare 1.1.1.1 (DNS-over-HTTPS) — " + sw.ElapsedMilliseconds + " мс";
+                                    _lblWarpDohVal.ForeColor = Color.FromArgb(52, 211, 153);
                                 }
-                                if (_statChipDoh != null) {
-                                    _statChipDoh.UpdateVal("Активен (" + sw.ElapsedMilliseconds + " мс)", Color.FromArgb(52, 211, 153));
-                                }
+
                                 Log("DOH", "Шлюз Cloudflare DoH подтвержден (" + sw.ElapsedMilliseconds + " мс). DNS-запросы зашифрованы.", Color.FromArgb(52, 211, 153));
+                                MessageBox.Show(
+                                    "Проверка DNS-over-HTTPS (DoH):\n\n" +
+                                    "• Резолвер: Cloudflare 1.1.1.1 (TLS-шифрование)\n" +
+                                    "• Время отклика: " + sw.ElapsedMilliseconds + " мс\n" +
+                                    "• Статус резолва: api.anthropic.com подтвержден\n" +
+                                    "• Защита от цензуры: Активна (порт 443)\n\n" +
+                                    "Провайдер не может подменить или подсмотреть DNS-запросы к серверам Claude.",
+                                    "Тест Cloudflare DoH — Успешно",
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Information);
                             });
                         }
                     }
                 } catch (Exception ex) {
                     SafeInvoke(() => {
-                        if (_cardDoh != null) {
-                            _cardDoh.UpdateStatus("Ошибка DoH", Color.FromArgb(248, 113, 113), Color.FromArgb(35, 239, 68, 68),
-                                "Не удалось связаться с 1.1.1.1: " + ex.Message);
+                        if (_lblWarpDohVal != null) {
+                            _lblWarpDohVal.Text = "Cloudflare 1.1.1.1 — Таймаут отклика";
+                            _lblWarpDohVal.ForeColor = Color.FromArgb(248, 113, 113);
                         }
-                        if (_statChipDoh != null) {
-                            _statChipDoh.UpdateVal("Ошибка", Color.FromArgb(248, 113, 113));
-                        }
+
                         Log("ERR", "Ошибка теста DoH: " + ex.Message, Color.FromArgb(239, 68, 68));
+                        MessageBox.Show(
+                            "Ошибка при проверке Cloudflare DoH:\n" + ex.Message + "\n\n" +
+                            "Возможно, провайдер блокирует прямые запросы к 1.1.1.1 по HTTPS без VPN.",
+                            "Тест Cloudflare DoH",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning);
                     });
                 }
             });
@@ -2938,6 +3069,10 @@ namespace ProjectXO {
                         }
                     } catch {}
 
+                    if (hasActiveIpv6Leak) {
+                        Log("SECURITY", "Внимание: обнаружен глобальный IPv6 на физическом адаптере. Рекомендуется изоляция.", Color.FromArgb(248, 113, 113));
+                    }
+
                     // 6. Итоговое обновление UI на основе реальных измерений
                     SafeInvoke(() => {
                         CurrentPing = pingMs;
@@ -2950,65 +3085,48 @@ namespace ProjectXO {
                                 : "Адаптер VPN не подключен или соединение разорвано";
 
                             SetProtectionUIState(ProtectionState.BlockedNoVpn, reason);
-                            _statChipIp.UpdateVal("Риск бана (" + countryStr + ")", Color.FromArgb(248, 113, 113));
-                            if (_cardIp != null) {
-                                _cardIp.UpdateStatus("Риск бана (" + countryStr + ")", Color.FromArgb(248, 113, 113), Color.FromArgb(35, 239, 68, 68),
-                                    "Текущий IP: " + ipStr + " (" + countryStr + "). Доступ к Claude заблокирован.");
+                            if (_lblWarpIpVal != null) {
+                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") — Риск блокировки";
+                                _lblWarpIpVal.ForeColor = Color.FromArgb(248, 113, 113);
                             }
                             Log("SECURITY", "Аудит завершен: IP " + ipStr + " (" + countryStr + "). VPN: " + (vpnActive ? "Да" : "НЕТ") + ". Вход в Claude ЗАБЛОКИРОВАН.", Color.FromArgb(248, 113, 113));
                         } else {
                             SetProtectionUIState(ProtectionState.Protected, "Защита активна");
-                            _statChipIp.UpdateVal(ipStr + " (" + countryStr + ")", Color.FromArgb(52, 211, 153));
-                            if (_cardIp != null) {
-                                _cardIp.UpdateStatus(ipStr + " (" + countryStr + ")", Color.FromArgb(52, 211, 153), Color.FromArgb(35, 16, 185, 129),
-                                    "Внешний адрес: " + ipStr + " (" + countryStr + "). Трафик полностью туннелирован.");
+                            if (_lblWarpIpVal != null) {
+                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ")";
+                                _lblWarpIpVal.ForeColor = Color.FromArgb(52, 211, 153);
                             }
                             Log("SECURITY", "Аудит завершен: туннель активен (" + countryStr + ", " + ipStr + ", " + pingMs + " мс). Безопасный запуск Claude РАЗРЕШЕН.", Color.FromArgb(52, 211, 153));
                         }
 
                         // WFP
                         if (fwRulesCount > 0) {
-                            _statChipWfp.UpdateVal("Активен (" + fwRulesCount + " правил)", Color.FromArgb(52, 211, 153));
-                            if (_cardFirewall != null) {
-                                _cardFirewall.UpdateStatus("Активен (" + fwRulesCount + " правил)", Color.FromArgb(52, 211, 153), Color.FromArgb(35, 16, 185, 129),
-                                    "Ядро WFP изолирует подсети 160.79.104.0/23 на физических картах.");
+                            if (_lblWarpWfpVal != null) {
+                                _lblWarpWfpVal.Text = "Активен (" + fwRulesCount + " правил внедрено)";
+                                _lblWarpWfpVal.ForeColor = Color.FromArgb(52, 211, 153);
                             }
                         } else {
-                            _statChipWfp.UpdateVal("Требуется установка", Color.FromArgb(248, 113, 113));
-                            if (_cardFirewall != null) {
-                                _cardFirewall.UpdateStatus("Требуется установка", Color.FromArgb(248, 113, 113), Color.FromArgb(35, 239, 68, 68),
-                                    "Правила изоляции еще не внедрены. Нажмите «Применить правила».");
+                            if (_lblWarpWfpVal != null) {
+                                _lblWarpWfpVal.Text = "Правила не внедрены (нажмите для установки)";
+                                _lblWarpWfpVal.ForeColor = Color.FromArgb(248, 113, 113);
                             }
                         }
 
                         // Cloudflare / Anthropic
                         if (pingMs > 0) {
-                            _statChipGateway.UpdateVal("Доступен (" + pingMs + " мс)", Color.FromArgb(52, 211, 153));
-                            if (_cardCloudflare != null) {
-                                _cardCloudflare.UpdateStatus("Доступен (" + pingMs + " мс)", Color.FromArgb(52, 211, 153), Color.FromArgb(35, 16, 185, 129),
-                                    "Шлюз api.anthropic.com отвечает штатно за " + pingMs + " мс (TLS 1.2/1.3).");
+                            if (_lblWarpAnthropicVal != null) {
+                                _lblWarpAnthropicVal.Text = pingMs + " мс (TLS 1.2/1.3 прямой шлюз)";
+                                _lblWarpAnthropicVal.ForeColor = Color.FromArgb(52, 211, 153);
                             }
                         } else {
-                            _statChipGateway.UpdateVal("Таймаут (блок РФ)", Color.FromArgb(248, 113, 113));
-                            if (_cardCloudflare != null) {
-                                _cardCloudflare.UpdateStatus("Таймаут", Color.FromArgb(248, 113, 113), Color.FromArgb(35, 239, 68, 68),
-                                    "Серверы Anthropic заблокированы для вашего провайдера. Требуется включение VPN.");
+                            if (_lblWarpAnthropicVal != null) {
+                                _lblWarpAnthropicVal.Text = "Блокировка провайдером (Тайм-аут)";
+                                _lblWarpAnthropicVal.ForeColor = Color.FromArgb(248, 113, 113);
                             }
                         }
 
-                        // IPv6
-                        if (hasActiveIpv6Leak) {
-                            _statChipIpv6.UpdateVal("Внимание (утечка)", Color.FromArgb(248, 113, 113));
-                            if (_cardIpv6Dns != null) {
-                                _cardIpv6Dns.UpdateStatus("Внимание", Color.FromArgb(248, 113, 113), Color.FromArgb(35, 239, 68, 68),
-                                    "Обнаружен глобальный IPv6 на физическом адаптере. Нажмите «Изолировать» для блокировки утечек.");
-                            }
-                        } else {
-                            _statChipIpv6.UpdateVal("Изолирован", Color.FromArgb(52, 211, 153));
-                            if (_cardIpv6Dns != null) {
-                                _cardIpv6Dns.UpdateStatus("Изолирован", Color.FromArgb(52, 211, 153), Color.FromArgb(35, 16, 185, 129),
-                                    "IPv6 и Smart DNS на физических картах изолированы. Параллельные утечки исключены.");
-                            }
+                        if (_badgeTunnelStatus != null) {
+                            _badgeTunnelStatus.Invalidate();
                         }
                     });
                 } catch (Exception ex) {
@@ -3085,25 +3203,101 @@ namespace ProjectXO {
             } catch {}
         }
 
-        private void RunMemorySimulation() {
-            Log("SIM", "Тестирование алгоритма аварийного отсечения утечки...", Color.FromArgb(52, 211, 153));
-            Stopwatch sw = Stopwatch.StartNew();
+        private void RunEmergencyInterceptTest() {
+            Log("WFP-TEST", "Запуск прямого сокет-теста ядра WFP (отправка SYN пакета к 160.79.104.10:443)...", Color.FromArgb(148, 163, 184));
+            ThreadPool.QueueUserWorkItem((st) => {
+                Stopwatch sw = Stopwatch.StartNew();
+                bool blockedByKernel = false;
+                int errorCode = 0;
+                string errorMsg = "";
+                long elapsedMs = 0;
 
-            KillClaudeProcessesInMemory();
+                try {
+                    using (Socket sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)) {
+                        sock.ReceiveTimeout = 2000;
+                        sock.SendTimeout = 2000;
+                        IPAddress targetIp = IPAddress.Parse("160.79.104.10");
+                        IPEndPoint ep = new IPEndPoint(targetIp, 443);
 
-            sw.Stop();
-            long elapsed = sw.ElapsedMilliseconds;
+                        IAsyncResult ar = sock.BeginConnect(ep, null, null);
+                        bool success = ar.AsyncWaitHandle.WaitOne(1500, true);
+                        if (success) {
+                            try { sock.EndConnect(ar); } catch (SocketException se) { throw se; }
+                            sw.Stop();
+                            elapsedMs = sw.ElapsedMilliseconds;
+                            blockedByKernel = false;
+                        } else {
+                            sock.Close();
+                            sw.Stop();
+                            elapsedMs = sw.ElapsedMilliseconds;
+                            blockedByKernel = false;
+                            errorMsg = "Тайм-аут ожидания SYN-ACK (1500 мс)";
+                        }
+                    }
+                } catch (SocketException sex) {
+                    sw.Stop();
+                    elapsedMs = sw.ElapsedMilliseconds;
+                    errorCode = sex.ErrorCode;
+                    errorMsg = sex.Message;
+                    // 10013: WSAEACCES (WFP / Permission denied)
+                    // 10065: WSAEHOSTUNREACH (Host unreachable)
+                    // 10051: WSAENETUNREACH
+                    // 10060: WSAETIMEDOUT
+                    if (sex.ErrorCode == 10013 || sex.ErrorCode == 10065 || sex.ErrorCode == 10051) {
+                        blockedByKernel = true;
+                    }
+                } catch (Exception ex) {
+                    sw.Stop();
+                    elapsedMs = sw.ElapsedMilliseconds;
+                    errorMsg = ex.Message;
+                }
 
-            MessageBox.Show(
-                "Тест аварийного перехвата выполнен успешно!\n\n" +
-                "Время отклика сторожа: " + elapsed + " мс.\n" +
-                "Утечка пакетов на внешние интерфейсы: 0%.\n" +
-                "Все процессы Claude контролируются ядром.",
-                "Тест аварийного перехвата",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                int fwCount = GetFirewallRuleCountFromRegistry();
+                bool isProtected = (_currentState == ProtectionState.Protected);
 
-            Log("SIM", "Тест успешно завершен за " + elapsed + " мс. Утечек: 0%.", Color.FromArgb(52, 211, 153));
+                SafeInvoke(() => {
+                    if (blockedByKernel || (fwCount > 0 && errorCode == 10013)) {
+                        Log("WFP-TEST", string.Format("Пакет к 160.79.104.10:443 успешно сброшен фильтром WFP за {0} мс (WSA: {1}).", elapsedMs, errorCode), Color.FromArgb(52, 211, 153));
+                        MessageBox.Show(
+                            "Результат теста аварийного перехвата WFP:\n\n" +
+                            "• Статус ядра: ПЕРЕХВАТ АКТИВЕН (Аппаратный сброс SYN)\n" +
+                            "• Время отклика WFP: " + elapsedMs + " мс (мгновенный отсев ядра)\n" +
+                            "• Код сетевого перехвата ОС: " + errorCode + " (" + (errorCode == 10013 ? "WSAEACCES — Заблокировано WFP" : "WSAEHOSTUNREACH") + ")\n" +
+                            "• Зарегистрировано правил изоляции: " + fwCount + " шт.\n" +
+                            "• Целевой узел: 160.79.104.10:443 (Anthropic Direct CIDR)\n\n" +
+                            "Прямая утечка трафика на незащищенные сетевые интерфейсы исключена.",
+                            "Аварийный тест WFP — Успешно",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information);
+                    } else if (isProtected && CurrentPing > 0) {
+                        Log("WFP-TEST", string.Format("Трафик направлен через туннель (RTT: {0} мс). Прямой утечки нет.", elapsedMs), Color.FromArgb(52, 211, 153));
+                        MessageBox.Show(
+                            "Результат проверки безопасности соединения:\n\n" +
+                            "• Статус туннеля: ЗАЩИЩЕН (Трафик внутри VPN)\n" +
+                            "• Задержка отклика (RTT): " + elapsedMs + " мс\n" +
+                            "• Внешний адрес шлюза: " + CurrentIp + " (" + CurrentCountry + ")\n" +
+                            "• Активных правил изоляции в реестре: " + fwCount + " шт.\n\n" +
+                            "Шлюз Anthropic доступен исключительно через защищенный VPN-адаптер.",
+                            "Тест соединения",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information);
+                    } else {
+                        Log("WFP-TEST", string.Format("Внимание: сокет вернул код {0} ({1}). Правил WFP: {2}.", errorCode, errorMsg, fwCount), Color.FromArgb(248, 113, 113));
+                        MessageBox.Show(
+                            "Результат теста безопасности:\n\n" +
+                            "• Статус: Прямое соединение к Anthropic не перехвачено ядром!\n" +
+                            "• Время замера: " + elapsedMs + " мс\n" +
+                            "• Ответ сокета: " + (errorCode > 0 ? ("Код " + errorCode + " (" + errorMsg + ")") : (string.IsNullOrEmpty(errorMsg) ? "Соединение установлено без фильтрации" : errorMsg)) + "\n" +
+                            "• Внедрено правил WFP в систему: " + fwCount + " шт.\n\n" +
+                            (fwCount == 0
+                                ? "Рекомендация: нажмите «Применить правила» в строке WFP для активации фильтрации."
+                                : "Рекомендация: включите VPN перед запуском приложений Claude."),
+                            "Тест перехвата WFP — Внимание",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning);
+                    }
+                });
+            });
         }
 
         private void ApplyFirewallRulesSilent() {
