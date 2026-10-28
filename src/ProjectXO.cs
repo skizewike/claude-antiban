@@ -142,6 +142,50 @@ namespace ProjectXO {
         }
     }
 
+    // Глобальное хранилище статических ассетов и иконки приложения
+    public static class AppAssets {
+        private static Image _appIcon;
+        private static readonly object _lock = new object();
+
+        public static Image AppIcon {
+            get {
+                if (_appIcon == null) {
+                    lock (_lock) {
+                        if (_appIcon == null) {
+                            try {
+                                using (Stream s = typeof(Program).Assembly.GetManifestResourceStream("app_icon.png")) {
+                                    if (s != null) {
+                                        _appIcon = Image.FromStream(s);
+                                    }
+                                }
+                            } catch {}
+
+                            if (_appIcon == null) {
+                                string p = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app_icon.png");
+                                if (File.Exists(p)) {
+                                    try { _appIcon = Image.FromFile(p); } catch {}
+                                }
+                            }
+
+                            if (_appIcon == null) {
+                                try {
+                                    using (Stream s = typeof(Program).Assembly.GetManifestResourceStream("app_icon.ico")) {
+                                        if (s != null) {
+                                            using (Icon ico = new Icon(s, 256, 256)) {
+                                                _appIcon = ico.ToBitmap();
+                                            }
+                                        }
+                                    }
+                                } catch {}
+                            }
+                        }
+                    }
+                }
+                return _appIcon;
+            }
+        }
+    }
+
     // Вспомогательный класс для рисования скругленных контуров GDI+
     public static class GraphicsUtils {
         public static GraphicsPath CreateRoundedRectangle(Rectangle bounds, int radius) {
@@ -190,6 +234,26 @@ namespace ProjectXO {
             using (Pen pen = new Pen(strokeColor, 1.8f)) {
                 pen.LineJoin = LineJoin.Round;
                 g.DrawPath(pen, p);
+            }
+        }
+
+        public static void DrawChatBubbleIcon(Graphics g, Rectangle r, Color color) {
+            using (Pen p = new Pen(color, 1.6f)) {
+                p.StartCap = LineCap.Round;
+                p.EndCap = LineCap.Round;
+                Rectangle bubble = new Rectangle(r.X + 2, r.Y + 2, r.Width - 4, r.Height - 7);
+                using (GraphicsPath path = CreateRoundedRectangle(bubble, 6)) {
+                    g.DrawPath(p, path);
+                }
+                g.DrawLine(p, r.X + 6, r.Y + r.Height - 5, r.X + 3, r.Y + r.Height - 1);
+                g.DrawLine(p, r.X + 3, r.Y + r.Height - 1, r.X + 11, r.Y + r.Height - 5);
+            }
+            using (SolidBrush b = new SolidBrush(color)) {
+                int dotY = r.Y + (r.Height - 7) / 2 + 1;
+                int midX = r.X + r.Width / 2;
+                g.FillEllipse(b, midX - 5, dotY, 2, 2);
+                g.FillEllipse(b, midX, dotY, 2, 2);
+                g.FillEllipse(b, midX + 5, dotY, 2, 2);
             }
         }
     }
@@ -300,7 +364,7 @@ namespace ProjectXO {
         }
     }
 
-    // Анимированная интерактивная Hero-область в стиле Cloudflare One Zero-Trust
+        // Анимированная центральная интерактивная область в стиле Cloudflare WARP
     public class HeroCloudGraphic : Panel {
         private ProtectionState _state = ProtectionState.Checking;
         public ProtectionState State {
@@ -317,12 +381,12 @@ namespace ProjectXO {
         public HeroCloudGraphic() {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
             BackColor = Color.Transparent;
-            Size = new Size(180, 100);
+            Size = new Size(240, 140);
 
             _animTimer = new System.Windows.Forms.Timer();
-            _animTimer.Interval = 35; // Плавные 30 кадров/сек
+            _animTimer.Interval = 33; // 30 FPS smooth
             _animTimer.Tick += (s, e) => {
-                _phase += 0.06f;
+                _phase += 0.05f;
                 if (_phase > (float)(Math.PI * 2)) _phase -= (float)(Math.PI * 2);
                 Invalidate();
             };
@@ -340,118 +404,118 @@ namespace ProjectXO {
         protected override void OnPaint(PaintEventArgs e) {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
             g.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
-            int w = Width;
-            int h = Height;
-            int cx = w / 2;
-            int cy = h / 2;
+            int cx = Width / 2;
+            int cy = Height / 2;
 
             bool isSafe = (_state == ProtectionState.Protected);
-            Color themeColor = isSafe ? Color.FromArgb(16, 185, 129) : Color.FromArgb(239, 68, 68);
-            Color glowColor = isSafe ? Color.FromArgb(55, 16, 185, 129) : Color.FromArgb(60, 239, 68, 68);
-            Color cloudFill1 = isSafe ? Color.FromArgb(19, 39, 36) : Color.FromArgb(31, 35, 49);
-            Color cloudFill2 = isSafe ? Color.FromArgb(16, 28, 28) : Color.FromArgb(21, 24, 36);
 
-            // 1. Анимированные плавающие частицы (Cloudflare One Style Particles)
-            float floatY1 = (float)Math.Sin(_phase) * 3f;
-            float floatY2 = (float)Math.Cos(_phase * 1.3f) * 3.5f;
-            float floatY3 = (float)Math.Sin(_phase * 0.8f + 1.2f) * 2.8f;
+            // 1. Парящие гармонические частицы Cloudflare WARP
+            float p1Y = (float)Math.Sin(_phase) * 6f;
+            float p1X = (float)Math.Cos(_phase) * 3f;
+            float p2Y = (float)Math.Cos(_phase * 1.2f) * 7f;
+            float p2X = (float)Math.Sin(_phase * 1.2f) * 4f;
+            float p3Y = (float)Math.Sin(_phase * 0.8f + 1.5f) * 5f;
+            float p4Y = (float)Math.Cos(_phase * 1.4f + 0.8f) * 6f;
 
-            using (SolidBrush p1 = new SolidBrush(isSafe ? Color.FromArgb(16, 185, 129) : Color.FromArgb(239, 68, 68))) {
-                g.FillEllipse(p1, cx - 64, cy - 30 + floatY1, 5, 5);
-            }
-            using (SolidBrush p2 = new SolidBrush(Color.FromArgb(148, 163, 184))) {
-                g.FillEllipse(p2, cx + 58, cy - 26 + floatY2, 4, 4);
-            }
-            using (SolidBrush p3 = new SolidBrush(isSafe ? Color.FromArgb(52, 211, 153) : Color.FromArgb(248, 113, 113))) {
-                g.FillEllipse(p3, cx - 68, cy + 22 + floatY3, 6, 6);
-            }
-            using (SolidBrush p4 = new SolidBrush(isSafe ? Color.FromArgb(5, 150, 105) : Color.FromArgb(100, 116, 139))) {
-                g.FillEllipse(p4, cx + 62, cy + 20 - floatY1, 5, 5);
-            }
-            using (SolidBrush p5 = new SolidBrush(isSafe ? Color.FromArgb(56, 189, 248) : Color.FromArgb(239, 68, 68))) {
-                g.FillEllipse(p5, cx + 22, cy - 40 + floatY2, 3, 3);
-            }
-            using (SolidBrush p6 = new SolidBrush(isSafe ? Color.FromArgb(110, 231, 183) : Color.FromArgb(203, 213, 225))) {
-                g.FillEllipse(p6, cx - 24, cy + 34 + floatY1, 4, 4);
-            }
+            Color cParticle1 = isSafe ? Color.FromArgb(52, 211, 153) : Color.FromArgb(239, 68, 68);
+            Color cParticle2 = isSafe ? Color.FromArgb(16, 185, 129) : Color.FromArgb(248, 113, 113);
+            Color cParticle3 = isSafe ? Color.FromArgb(56, 189, 248) : Color.FromArgb(251, 146, 60);
+            Color cParticleMuted = Color.FromArgb(148, 163, 184);
 
-            // 2. Внешнее мягкое радиальное свечение ауры
-            float breath = (float)Math.Sin(_phase) * 4f;
-            Rectangle auraRect = new Rectangle(cx - 68 - (int)breath, cy - 44 - (int)breath, 136 + (int)(breath * 2), 88 + (int)(breath * 2));
+            // Отрисовка орбитальных точек
+            using (SolidBrush b = new SolidBrush(cParticle1)) g.FillEllipse(b, cx - 64 + p1X, cy - 38 + p1Y, 6, 6);
+            using (SolidBrush b = new SolidBrush(cParticleMuted)) g.FillEllipse(b, cx + 60 + p2X, cy - 32 + p2Y, 5, 5);
+            using (SolidBrush b = new SolidBrush(cParticle2)) g.FillEllipse(b, cx - 70 + p3Y, cy + 26 + p3Y, 7, 7);
+            using (SolidBrush b = new SolidBrush(cParticle3)) g.FillEllipse(b, cx + 66 - p1X, cy + 30 - p1Y, 5, 5);
+            using (SolidBrush b = new SolidBrush(Color.FromArgb(226, 232, 240))) g.FillEllipse(b, cx - 24 + p2X, cy - 48 + p4Y, 4, 4);
+            using (SolidBrush b = new SolidBrush(cParticle1)) g.FillEllipse(b, cx + 26 - p3Y, cy + 46 + p2Y, 5, 5);
+            using (SolidBrush b = new SolidBrush(Color.FromArgb(100, 116, 139))) g.FillEllipse(b, cx - 76 + p4Y, cy - 4 + p1Y, 4, 4);
+            using (SolidBrush b = new SolidBrush(cParticle2)) g.FillEllipse(b, cx + 74 + p1X, cy - 2 - p2Y, 6, 6);
+
+            // 2. Мягкое радиальное свечение ауры
+            float breath = (float)Math.Sin(_phase) * 3f;
+            Rectangle auraRect = new Rectangle(cx - 56 - (int)breath, cy - 56 - (int)breath, 112 + (int)(breath * 2), 112 + (int)(breath * 2));
             using (GraphicsPath auraPath = new GraphicsPath()) {
                 auraPath.AddEllipse(auraRect);
                 using (PathGradientBrush pgb = new PathGradientBrush(auraPath)) {
-                    pgb.CenterColor = glowColor;
-                    pgb.SurroundColors = new Color[] { Color.FromArgb(0, 13, 15, 21) };
+                    pgb.CenterColor = isSafe ? Color.FromArgb(40, 16, 185, 129) : Color.FromArgb(45, 239, 68, 68);
+                    pgb.SurroundColors = new Color[] { Color.FromArgb(0, 10, 12, 17) };
                     g.FillPath(pgb, auraPath);
                 }
             }
 
-            // 3. Форма облака (104 × 64 px)
-            Rectangle cloudBounds = new Rectangle(cx - 52, cy - 32, 104, 64);
-            using (GraphicsPath cloudPath = GraphicsUtils.CreateRoundedRectangle(cloudBounds, 32)) {
-                using (LinearGradientBrush cBrush = new LinearGradientBrush(cloudBounds, cloudFill1, cloudFill2, 145f)) {
-                    g.FillPath(cBrush, cloudPath);
-                }
+            // 3. Прямое отображение крупной иконки app_icon без дополнительных подложек
+            Image iconImg = AppAssets.AppIcon;
+            int iconSize = 92;
+            Rectangle iconRect = new Rectangle(cx - iconSize / 2, cy - iconSize / 2, iconSize, iconSize);
 
-                using (Pen innerPen = new Pen(Color.FromArgb(30, 255, 255, 255), 1f)) {
-                    g.DrawLine(innerPen, cloudBounds.Left + 20, cloudBounds.Top + 2, cloudBounds.Right - 20, cloudBounds.Top + 2);
-                }
-
-                using (Pen borderPen = new Pen(Color.FromArgb(160, themeColor), 2f)) {
-                    g.DrawPath(borderPen, cloudPath);
+            if (iconImg != null) {
+                g.DrawImage(iconImg, iconRect);
+            } else {
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(204, 120, 92))) {
+                    g.FillEllipse(b, iconRect);
                 }
             }
 
-            // 4. Центральный символ статуса
+            // 4. Аккуратный индикатор статуса в правом нижнем углу иконки (✕ при ошибке / ✓ при защите)
+            int badgeSize = 24;
+            int badgeX = cx + iconSize / 2 - 18;
+            int badgeY = cy + iconSize / 2 - 18;
+            Rectangle badgeRect = new Rectangle(badgeX, badgeY, badgeSize, badgeSize);
+
+            using (SolidBrush bgB = new SolidBrush(Color.FromArgb(17, 19, 27))) {
+                g.FillEllipse(bgB, badgeRect);
+            }
+            using (SolidBrush bb = new SolidBrush(isSafe ? Color.FromArgb(16, 185, 129) : Color.FromArgb(239, 68, 68))) {
+                Rectangle badgeInner = new Rectangle(badgeX + 2, badgeY + 2, badgeSize - 4, badgeSize - 4);
+                g.FillEllipse(bb, badgeInner);
+            }
+
             if (isSafe) {
-                using (Pen checkPen = new Pen(Color.FromArgb(52, 211, 153), 2.8f)) {
+                using (Pen checkPen = new Pen(Color.White, 2f)) {
                     checkPen.StartCap = LineCap.Round;
                     checkPen.EndCap = LineCap.Round;
-                    g.DrawLine(checkPen, cx - 12, cy + 2, cx - 3, cy + 11);
-                    g.DrawLine(checkPen, cx - 3, cy + 11, cx + 13, cy - 7);
+                    g.DrawLine(checkPen, badgeX + 7, badgeY + 12, badgeX + 10, badgeY + 15);
+                    g.DrawLine(checkPen, badgeX + 10, badgeY + 15, badgeX + 17, badgeY + 8);
                 }
             } else {
-                using (Pen crossPen = new Pen(Color.FromArgb(239, 68, 68), 2.8f)) {
+                using (Pen crossPen = new Pen(Color.White, 2f)) {
                     crossPen.StartCap = LineCap.Round;
                     crossPen.EndCap = LineCap.Round;
-                    g.DrawLine(crossPen, cx - 10, cy - 10, cx + 10, cy + 10);
-                    g.DrawLine(crossPen, cx + 10, cy - 10, cx - 10, cy + 10);
+                    g.DrawLine(crossPen, badgeX + 8, badgeY + 8, badgeX + 16, badgeY + 16);
+                    g.DrawLine(crossPen, badgeX + 16, badgeY + 8, badgeX + 8, badgeY + 16);
                 }
             }
         }
     }
 
-    // Горизонтальная карточка быстрого запуска Claude
+    // Минималистичная карточка быстрого запуска Claude в стиле Cloudflare WARP
     public class LauncherCard : Panel {
         private bool _isHovered = false;
         private string _title;
-        private string _badgeText;
-        private Color _badgeColor;
-        private Color _badgeBg;
+        private string _subTitle;
         private int _iconType; // 0: Desktop, 1: Browser, 2: Terminal
+        private bool _isSafe = false;
 
         public event Action CardClicked;
 
         public LauncherCard(string title, int iconType) {
             _title = title;
             _iconType = iconType;
-            _badgeText = "Предупреждение";
-            _badgeColor = Color.FromArgb(248, 113, 113);
-            _badgeBg = Color.FromArgb(35, 239, 68, 68);
+            _subTitle = "Вход заблокирован (нет VPN)";
 
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
-            Size = new Size(256, 44);
-            BackColor = Color.FromArgb(21, 24, 34);
+            Size = new Size(240, 64);
+            BackColor = Color.FromArgb(17, 20, 28);
             Cursor = Cursors.Hand;
         }
 
         public void SetState(bool isSafe) {
-            _badgeText = isSafe ? "Безопасно" : "Предупреждение";
-            _badgeColor = isSafe ? Color.FromArgb(52, 211, 153) : Color.FromArgb(248, 113, 113);
-            _badgeBg = isSafe ? Color.FromArgb(35, 16, 185, 129) : Color.FromArgb(35, 239, 68, 68);
+            _isSafe = isSafe;
+            _subTitle = isSafe ? "Готов к безопасному запуску" : "Вход заблокирован (нет VPN)";
             Invalidate();
         }
 
@@ -479,8 +543,10 @@ namespace ProjectXO {
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
             Rectangle bounds = new Rectangle(0, 0, Width - 1, Height - 1);
-            Color fill = _isHovered ? Color.FromArgb(28, 32, 46) : Color.FromArgb(21, 24, 34);
-            Color border = _isHovered ? Color.FromArgb(90, _badgeColor) : Color.FromArgb(45, _badgeColor);
+            Color fill = _isHovered ? Color.FromArgb(27, 32, 45) : Color.FromArgb(17, 20, 28);
+            Color border = _isHovered 
+                ? (_isSafe ? Color.FromArgb(90, 52, 211, 153) : Color.FromArgb(90, 248, 113, 113))
+                : Color.FromArgb(32, 38, 52);
 
             using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(bounds, 8)) {
                 using (SolidBrush b = new SolidBrush(fill)) {
@@ -491,9 +557,9 @@ namespace ProjectXO {
                 }
             }
 
-            // Иконка
-            Rectangle iconBox = new Rectangle(10, 10, 24, 24);
-            using (SolidBrush ib = new SolidBrush(Color.FromArgb(18, 255, 255, 255))) {
+            // Контейнер иконки
+            Rectangle iconBox = new Rectangle(12, 15, 34, 34);
+            using (SolidBrush ib = new SolidBrush(Color.FromArgb(20, 255, 255, 255))) {
                 using (GraphicsPath ip = GraphicsUtils.CreateRoundedRectangle(iconBox, 6)) {
                     g.FillPath(ib, ip);
                 }
@@ -504,41 +570,42 @@ namespace ProjectXO {
                 iconPen.EndCap = LineCap.Round;
 
                 if (_iconType == 0) {
-                    g.DrawRectangle(iconPen, 15, 15, 14, 9);
-                    g.DrawLine(iconPen, 22, 24, 22, 28);
-                    g.DrawLine(iconPen, 18, 28, 26, 28);
+                    g.DrawRectangle(iconPen, 20, 22, 18, 12);
+                    g.DrawLine(iconPen, 29, 34, 29, 40);
+                    g.DrawLine(iconPen, 24, 40, 34, 40);
                 } else if (_iconType == 1) {
-                    g.DrawEllipse(iconPen, 15, 15, 14, 14);
-                    g.DrawLine(iconPen, 15, 22, 29, 22);
-                    g.DrawArc(iconPen, 18, 15, 8, 14, 0, 360);
+                    g.DrawEllipse(iconPen, 19, 22, 18, 18);
+                    g.DrawLine(iconPen, 19, 31, 37, 31);
+                    g.DrawArc(iconPen, 23, 22, 10, 18, 0, 360);
                 } else {
-                    g.DrawLine(iconPen, 16, 18, 20, 22);
-                    g.DrawLine(iconPen, 20, 22, 16, 26);
-                    g.DrawLine(iconPen, 22, 26, 27, 26);
+                    g.DrawLine(iconPen, 21, 25, 26, 30);
+                    g.DrawLine(iconPen, 26, 30, 21, 35);
+                    g.DrawLine(iconPen, 28, 35, 35, 35);
                 }
             }
 
-            using (Font titleFont = new Font("Segoe UI", 8.8f, FontStyle.Bold)) {
-                using (SolidBrush tb = new SolidBrush(Color.FromArgb(241, 245, 249))) {
-                    g.DrawString(_title, titleFont, tb, 42, 14);
+            // Заголовок карточки (Строка 1)
+            using (Font titleFont = new Font("Segoe UI", 9.2f, FontStyle.Bold)) {
+                using (SolidBrush tb = new SolidBrush(Color.FromArgb(248, 250, 252))) {
+                    g.DrawString(_title, titleFont, tb, 54, 14);
                 }
             }
 
-            using (Font badgeFont = new Font("Segoe UI", 7.5f, FontStyle.Bold)) {
-                SizeF sz = g.MeasureString(_badgeText, badgeFont);
-                int bw = (int)sz.Width + 12;
-                int bh = 20;
-                int bx = Width - bw - 10;
-                int by = (Height - bh) / 2;
-
-                Rectangle badgeRect = new Rectangle(bx, by, bw, bh);
-                using (GraphicsPath bp = GraphicsUtils.CreateRoundedRectangle(badgeRect, 4)) {
-                    using (SolidBrush bgb = new SolidBrush(_badgeBg)) {
-                        g.FillPath(bgb, bp);
-                    }
+            // Индикатор-точка и текст статуса (Строка 2 - полное разделение без наложений)
+            Color statusColor = _isSafe ? Color.FromArgb(52, 211, 153) : Color.FromArgb(248, 113, 113);
+            using (SolidBrush dotBrush = new SolidBrush(statusColor)) {
+                g.FillEllipse(dotBrush, 55, 37, 6, 6);
+            }
+            using (Font statusFont = new Font("Segoe UI", 8f)) {
+                using (SolidBrush sb = new SolidBrush(statusColor)) {
+                    g.DrawString(_subTitle, statusFont, sb, 66, 33);
                 }
-                using (SolidBrush txtB = new SolidBrush(_badgeColor)) {
-                    g.DrawString(_badgeText, badgeFont, txtB, bx + 6, by + 3);
+            }
+
+            // Стрелка перехода справа ↗
+            using (Font arrowFont = new Font("Segoe UI", 9.5f, FontStyle.Bold)) {
+                using (SolidBrush ab = new SolidBrush(_isHovered ? Color.White : Color.FromArgb(71, 85, 105))) {
+                    g.DrawString("↗", arrowFont, ab, Width - 24, 13);
                 }
             }
         }
@@ -916,9 +983,6 @@ namespace ProjectXO {
         private List<Panel> _tabPages = new List<Panel>();
 
         // Элементы страницы 0: Главная (Hero Dashboard)
-        private Label _lblHeaderTitle;
-        private Label _lblHeaderDesc;
-        private Label _lblWfpStatusText;
         private HeroCloudGraphic _heroCloud;
         private Label _lblStatusTitle;
         private Label _lblStatusSubtitle;
@@ -941,7 +1005,6 @@ namespace ProjectXO {
         private TelemetryStatChip _statChipGateway;
         private TelemetryStatChip _statChipIpv6;
         private TelemetryStatChip _statChipDoh;
-        private Label _lblFooterNoteText;
 
         // Элементы страницы 1: Защита и шлюзы
         private FlowLayoutPanel _pnlDiagnostics;
@@ -1165,24 +1228,20 @@ namespace ProjectXO {
             };
             Controls.Add(_pnlTitlebar);
 
-            // Иконка в Titlebar
+            // Иконка в Titlebar (app_icon)
             _appIconBox = new Panel() {
-                Location = new Point(14, 9),
-                Size = new Size(20, 20),
+                Location = new Point(14, 8),
+                Size = new Size(22, 22),
                 BackColor = Color.Transparent
             };
             _appIconBox.Paint += (s, pe) => {
                 Graphics g = pe.Graphics;
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.SmoothingMode = SmoothingMode.AntiAlias;
-                Rectangle r = new Rectangle(0, 0, 19, 19);
-                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 4)) {
-                    Color c1 = (_currentState == ProtectionState.Protected) ? Color.FromArgb(5, 150, 105) : Color.FromArgb(249, 115, 22);
-                    Color c2 = (_currentState == ProtectionState.Protected) ? Color.FromArgb(16, 185, 129) : Color.FromArgb(239, 68, 68);
-                    using (LinearGradientBrush lgb = new LinearGradientBrush(r, c1, c2, 135f)) {
-                        g.FillPath(lgb, p);
-                    }
+                Image img = AppAssets.AppIcon;
+                if (img != null) {
+                    g.DrawImage(img, new Rectangle(0, 0, _appIconBox.Width, _appIconBox.Height));
                 }
-                GraphicsUtils.DrawShieldIcon(g, new Rectangle(3, 3, 14, 14), Color.White, Color.Transparent);
             };
             _pnlTitlebar.Controls.Add(_appIconBox);
 
@@ -1283,7 +1342,7 @@ namespace ProjectXO {
             };
             Controls.Add(_pnlContent);
 
-            // 5 Вкладок внутри контента
+            // 5 Вкладок внутри контента (соответствуют порядку меню WARP)
             Panel pageHero = new Panel() { Location = new Point(0, 0), Size = new Size(842, 682), BackColor = Color.Transparent };
             _tabPages.Add(pageHero);
             _pnlContent.Controls.Add(pageHero);
@@ -1299,15 +1358,15 @@ namespace ProjectXO {
             _pnlContent.Controls.Add(pageBypass);
             BuildBypassPage(pageBypass);
 
-            Panel pageLogs = new Panel() { Location = new Point(0, 0), Size = new Size(842, 682), BackColor = Color.Transparent, Visible = false };
-            _tabPages.Add(pageLogs);
-            _pnlContent.Controls.Add(pageLogs);
-            BuildLogsPage(pageLogs);
-
             Panel pageSettings = new Panel() { Location = new Point(0, 0), Size = new Size(842, 682), BackColor = Color.Transparent, Visible = false };
             _tabPages.Add(pageSettings);
             _pnlContent.Controls.Add(pageSettings);
             BuildSettingsPage(pageSettings);
+
+            Panel pageLogs = new Panel() { Location = new Point(0, 0), Size = new Size(842, 682), BackColor = Color.Transparent, Visible = false };
+            _tabPages.Add(pageLogs);
+            _pnlContent.Controls.Add(pageLogs);
+            BuildLogsPage(pageLogs);
 
             SelectTab(0);
         }
@@ -1327,23 +1386,20 @@ namespace ProjectXO {
             };
             _pnlSidebar.Controls.Add(pnlBrand);
 
+            // Логотип приложения (app_icon)
             _brandLogoBox = new Panel() {
-                Location = new Point(4, 8),
-                Size = new Size(28, 28),
+                Location = new Point(4, 6),
+                Size = new Size(32, 32),
                 BackColor = Color.Transparent
             };
             _brandLogoBox.Paint += (s, pe) => {
                 Graphics g = pe.Graphics;
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.SmoothingMode = SmoothingMode.AntiAlias;
-                Rectangle r = new Rectangle(0, 0, 27, 27);
-                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 7)) {
-                    Color c1 = (_currentState == ProtectionState.Protected) ? Color.FromArgb(5, 150, 105) : Color.FromArgb(217, 119, 6);
-                    Color c2 = (_currentState == ProtectionState.Protected) ? Color.FromArgb(16, 185, 129) : Color.FromArgb(220, 38, 38);
-                    using (LinearGradientBrush lgb = new LinearGradientBrush(r, c1, c2, 135f)) {
-                        g.FillPath(lgb, p);
-                    }
+                Image img = AppAssets.AppIcon;
+                if (img != null) {
+                    g.DrawImage(img, new Rectangle(0, 0, _brandLogoBox.Width, _brandLogoBox.Height));
                 }
-                GraphicsUtils.DrawShieldIcon(g, new Rectangle(5, 5, 18, 18), Color.White, Color.Transparent);
             };
             pnlBrand.Controls.Add(_brandLogoBox);
 
@@ -1351,10 +1407,19 @@ namespace ProjectXO {
                 Text = "Anti-Ban Barrier",
                 Font = new Font("Segoe UI", 9.8f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(248, 250, 252),
-                Location = new Point(38, 12),
+                Location = new Point(42, 8),
                 AutoSize = true
             };
             pnlBrand.Controls.Add(lblBrandName);
+
+            Label lblBrandSub = new Label() {
+                Text = "Project XO Client",
+                Font = new Font("Segoe UI", 7.5f),
+                ForeColor = Color.FromArgb(100, 116, 139),
+                Location = new Point(43, 27),
+                AutoSize = true
+            };
+            pnlBrand.Controls.Add(lblBrandSub);
 
             Panel sepTop = new Panel() {
                 Location = new Point(12, 64),
@@ -1363,12 +1428,13 @@ namespace ProjectXO {
             };
             _pnlSidebar.Controls.Add(sepTop);
 
+            // 5 Вкладок меню в стиле Cloudflare One Client
             string[] navTitles = new string[] {
                 "Главная",
-                "Защита и шлюзы",
+                "Подключение",
                 "Обход блокировок",
-                "Журнал событий",
-                "Настройки"
+                "Настройки",
+                "Журнал"
             };
 
             int startY = 74;
@@ -1377,7 +1443,7 @@ namespace ProjectXO {
                 Panel navBtn = new Panel() {
                     Location = new Point(12, startY + i * 44),
                     Size = new Size(194, 38),
-                    BackColor = (i == 0) ? Color.FromArgb(25, 28, 40) : Color.Transparent,
+                    BackColor = (i == 0) ? Color.FromArgb(28, 33, 46) : Color.Transparent,
                     Cursor = Cursors.Hand
                 };
 
@@ -1389,21 +1455,22 @@ namespace ProjectXO {
                     bool isSelected = (_selectedTabIndex == tabIdx);
                     Color textColor = isSelected ? Color.White : Color.FromArgb(148, 163, 184);
                     Color iconColor = isSelected
-                        ? ((_currentState == ProtectionState.Protected) ? Color.FromArgb(52, 211, 153) : Color.FromArgb(249, 115, 22))
+                        ? ((_currentState == ProtectionState.Protected) ? Color.FromArgb(52, 211, 153) : Color.FromArgb(59, 130, 246))
                         : Color.FromArgb(148, 163, 184);
 
                     if (isSelected) {
                         Rectangle r = new Rectangle(0, 0, navBtn.Width - 1, navBtn.Height - 1);
                         using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
-                            using (SolidBrush b = new SolidBrush(Color.FromArgb(25, 28, 40))) {
+                            using (SolidBrush b = new SolidBrush(Color.FromArgb(28, 33, 46))) {
                                 g.FillPath(b, p);
                             }
-                            using (Pen pen = new Pen(Color.FromArgb(38, 42, 58), 1f)) {
+                            using (Pen pen = new Pen(Color.FromArgb(45, 54, 76), 1f)) {
                                 g.DrawPath(pen, p);
                             }
                         }
                     }
 
+                    // Векторные пиктограммы Cloudflare One
                     using (Pen ip = new Pen(iconColor, 1.6f)) {
                         ip.StartCap = LineCap.Round;
                         ip.EndCap = LineCap.Round;
@@ -1411,12 +1478,19 @@ namespace ProjectXO {
                         int iy = 11;
 
                         if (tabIdx == 0) {
+                            // Globe (Главная)
                             g.DrawEllipse(ip, ix, iy, 14, 14);
                             g.DrawLine(ip, ix, iy + 7, ix + 14, iy + 7);
                             g.DrawArc(ip, ix + 3, iy, 8, 14, 0, 360);
                         } else if (tabIdx == 1) {
-                            GraphicsUtils.DrawShieldIcon(g, new Rectangle(ix, iy, 14, 14), iconColor, Color.Transparent);
+                            // Network Nodes Graph (Подключение)
+                            g.DrawEllipse(ip, ix + 1, iy + 7, 4, 4);
+                            g.DrawEllipse(ip, ix + 9, iy + 2, 4, 4);
+                            g.DrawEllipse(ip, ix + 9, iy + 10, 4, 4);
+                            g.DrawLine(ip, ix + 4, iy + 8, ix + 9, iy + 4);
+                            g.DrawLine(ip, ix + 4, iy + 9, ix + 9, iy + 11);
                         } else if (tabIdx == 2) {
+                            // Lightning Zapret
                             Point[] pts = new Point[] {
                                 new Point(ix + 8, iy),
                                 new Point(ix + 2, iy + 8),
@@ -1428,12 +1502,14 @@ namespace ProjectXO {
                             };
                             g.DrawLines(ip, pts);
                         } else if (tabIdx == 3) {
-                            g.DrawLine(ip, ix + 2, iy + 3, ix + 6, iy + 7);
-                            g.DrawLine(ip, ix + 6, iy + 7, ix + 2, iy + 11);
-                            g.DrawLine(ip, ix + 8, iy + 11, ix + 13, iy + 11);
-                        } else {
+                            // Settings Gear
                             g.DrawEllipse(ip, ix + 2, iy + 2, 11, 11);
                             g.DrawEllipse(ip, ix + 5, iy + 5, 5, 5);
+                        } else {
+                            // Logs Journal Document
+                            g.DrawRectangle(ip, ix + 2, iy + 1, 11, 13);
+                            g.DrawLine(ip, ix + 5, iy + 5, ix + 10, iy + 5);
+                            g.DrawLine(ip, ix + 5, iy + 8, ix + 10, iy + 8);
                         }
                     }
 
@@ -1456,69 +1532,43 @@ namespace ProjectXO {
                 _pnlSidebar.Controls.Add(navBtn);
             }
 
-            // Нижний кликабельный блок пользователя "Bogdan Zhukov Разработчик"
-            Panel pnlUser = new Panel() {
-                Location = new Point(8, 620),
-                Size = new Size(202, 54),
+            // Нижняя кнопка обратной связи в точности как в Cloudflare One Client
+            Panel pnlFeedback = new Panel() {
+                Location = new Point(12, 626),
+                Size = new Size(194, 44),
                 BackColor = Color.Transparent,
                 Cursor = Cursors.Hand
             };
-            pnlUser.MouseEnter += (s, e) => pnlUser.BackColor = Color.FromArgb(22, 26, 38);
-            pnlUser.MouseLeave += (s, e) => pnlUser.BackColor = Color.Transparent;
-            pnlUser.Click += (s, e) => ShowContactDialog();
-            _pnlSidebar.Controls.Add(pnlUser);
-
-            Panel sepBtm = new Panel() {
-                Location = new Point(12, 614),
-                Size = new Size(194, 1),
-                BackColor = Color.FromArgb(24, 27, 36)
-            };
-            _pnlSidebar.Controls.Add(sepBtm);
-
-            Panel pnlAvatar = new Panel() {
-                Location = new Point(6, 12),
-                Size = new Size(30, 30),
-                BackColor = Color.Transparent
-            };
-            pnlAvatar.Click += (s, e) => ShowContactDialog();
-            pnlAvatar.Paint += (s, pe) => {
+            pnlFeedback.Paint += (s, pe) => {
                 Graphics g = pe.Graphics;
                 g.SmoothingMode = SmoothingMode.AntiAlias;
-                Rectangle r = new Rectangle(0, 0, 29, 29);
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(24, 29, 41))) {
-                    g.FillEllipse(b, r);
+
+                Rectangle bubbleRect = new Rectangle(2, 4, 36, 36);
+                using (GraphicsPath bp = GraphicsUtils.CreateRoundedRectangle(bubbleRect, 8)) {
+                    using (SolidBrush bb = new SolidBrush(Color.FromArgb(22, 26, 38))) {
+                        g.FillPath(bb, bp);
+                    }
+                    using (Pen bpPen = new Pen(Color.FromArgb(40, 48, 68), 1f)) {
+                        g.DrawPath(bpPen, bp);
+                    }
                 }
-                using (Pen pen = new Pen(Color.FromArgb(249, 115, 22), 1.5f)) {
-                    g.DrawEllipse(pen, r);
+                GraphicsUtils.DrawChatBubbleIcon(g, new Rectangle(10, 12, 20, 20), Color.FromArgb(56, 189, 248));
+
+                using (Font fbFont = new Font("Segoe UI", 8.8f, FontStyle.Bold)) {
+                    using (SolidBrush fbBrush = new SolidBrush(Color.FromArgb(241, 245, 249))) {
+                        g.DrawString("Bogdan Zhukov", fbFont, fbBrush, 46, 6);
+                    }
                 }
-                using (Font f = new Font("Segoe UI", 8.2f, FontStyle.Bold)) {
-                    using (SolidBrush tb = new SolidBrush(Color.FromArgb(249, 115, 22))) {
-                        SizeF sz = g.MeasureString("BZ", f);
-                        g.DrawString("BZ", f, tb, (30 - sz.Width) / 2, (30 - sz.Height) / 2);
+                using (Font subFont = new Font("Segoe UI", 7.5f)) {
+                    using (SolidBrush subBrush = new SolidBrush(Color.FromArgb(56, 189, 248))) {
+                        g.DrawString("@bzhukov (Telegram)", subFont, subBrush, 46, 24);
                     }
                 }
             };
-            pnlUser.Controls.Add(pnlAvatar);
-
-            Label lblUserName = new Label() {
-                Text = "Bogdan Zhukov",
-                Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(226, 232, 240),
-                Location = new Point(40, 10),
-                AutoSize = true
-            };
-            lblUserName.Click += (s, e) => ShowContactDialog();
-            pnlUser.Controls.Add(lblUserName);
-
-            Label lblUserRole = new Label() {
-                Text = "Разработчик (связь: @bzhukov)",
-                Font = new Font("Segoe UI", 7.5f),
-                ForeColor = Color.FromArgb(56, 189, 248),
-                Location = new Point(41, 28),
-                AutoSize = true
-            };
-            lblUserRole.Click += (s, e) => ShowContactDialog();
-            pnlUser.Controls.Add(lblUserRole);
+            pnlFeedback.MouseEnter += (s, e) => pnlFeedback.BackColor = Color.FromArgb(18, 22, 32);
+            pnlFeedback.MouseLeave += (s, e) => pnlFeedback.BackColor = Color.Transparent;
+            pnlFeedback.Click += (s, e) => ShowContactDialog();
+            _pnlSidebar.Controls.Add(pnlFeedback);
         }
 
         public void SelectTab(int index) {
@@ -1535,162 +1585,158 @@ namespace ProjectXO {
 
         // Вкладка 0: Главная (Hero Dashboard с облачной анимацией и 3 карточками запуска)
         private void BuildHeroPage(Panel page) {
-            // Верхняя шапка контента (X=24, Y=14, Width=794)
-            Panel pnlHeader = new Panel() {
-                Location = new Point(24, 14),
-                Size = new Size(794, 44),
-                BackColor = Color.Transparent
-            };
-            page.Controls.Add(pnlHeader);
-
-            _lblHeaderTitle = new Label() {
-                Text = "CLAUDE ANTI-BAN BARRIER",
-                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(249, 115, 22),
-                Location = new Point(0, 2),
-                AutoSize = true
-            };
-            pnlHeader.Controls.Add(_lblHeaderTitle);
-
-            _lblHeaderDesc = new Label() {
-                Text = "Аппаратная изоляция трафика и превентивный контроль утечек",
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = Color.FromArgb(100, 116, 139),
-                Location = new Point(1, 24),
-                AutoSize = true
-            };
-            pnlHeader.Controls.Add(_lblHeaderDesc);
-
-            // Чип статуса WFP справа в шапке
-            Panel pnlWfpChip = new Panel() {
-                Location = new Point(560, 4),
-                Size = new Size(234, 30),
-                BackColor = Color.Transparent
-            };
-            pnlWfpChip.Paint += (s, pe) => {
-                Graphics g = pe.Graphics;
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                Rectangle r = new Rectangle(0, 0, pnlWfpChip.Width - 1, pnlWfpChip.Height - 1);
-                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 15)) {
-                    using (SolidBrush b = new SolidBrush(Color.FromArgb(20, 16, 185, 129))) {
-                        g.FillPath(b, p);
-                    }
-                    using (Pen pen = new Pen(Color.FromArgb(55, 16, 185, 129), 1f)) {
-                        g.DrawPath(pen, p);
-                    }
-                }
-                using (SolidBrush db = new SolidBrush(Color.FromArgb(16, 185, 129))) {
-                    g.FillEllipse(db, 12, 11, 7, 7);
-                }
-            };
-            _lblWfpStatusText = new Label() {
-                Text = "WFP Ядро: 10 правил активны",
-                Font = new Font("Segoe UI", 8.2f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(52, 211, 153),
-                Location = new Point(25, 6),
-                AutoSize = true,
-                BackColor = Color.Transparent
-            };
-            pnlWfpChip.Controls.Add(_lblWfpStatusText);
-            pnlHeader.Controls.Add(pnlWfpChip);
-
-            // Центральная секция Hero Graphic (X=24, Y=62, Width=794)
-            Panel pnlHero = new Panel() {
-                Location = new Point(24, 62),
-                Size = new Size(794, 250),
-                BackColor = Color.Transparent
-            };
-            page.Controls.Add(pnlHero);
-
+            // Центральная интерактивная фигура (крупный app_icon с парящими частицами WARP)
             _heroCloud = new HeroCloudGraphic() {
-                Location = new Point((pnlHero.Width - 180) / 2, 0)
+                Location = new Point((842 - 240) / 2, 45),
+                Size = new Size(240, 140)
             };
-            pnlHero.Controls.Add(_heroCloud);
+            page.Controls.Add(_heroCloud);
 
+            // Крупный статус в стиле Cloudflare WARP («Отключено» / «Подключено»)
             _lblStatusTitle = new Label() {
-                Text = "Вход с предупреждением",
-                Font = new Font("Segoe UI", 21f, FontStyle.Bold),
-                ForeColor = Color.White,
-                Size = new Size(794, 38),
-                Location = new Point(0, 96),
+                Text = "Отключено",
+                Font = new Font("Segoe UI", 25f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Size = new Size(842, 44),
+                Location = new Point(0, 198),
                 TextAlign = ContentAlignment.MiddleCenter
             };
-            pnlHero.Controls.Add(_lblStatusTitle);
+            page.Controls.Add(_lblStatusTitle);
 
             _lblStatusSubtitle = new Label() {
-                Text = "Обнаружен IP-адрес: Россия (Проверка...)\nТуннель VPN не активен — запуск Claude создает прямой риск блокировки аккаунта.",
+                Text = "Ваше интернет-подключение не защищено от блокировок Claude.",
                 Font = new Font("Segoe UI", 9.5f),
-                ForeColor = Color.FromArgb(203, 213, 225),
-                Size = new Size(794, 38),
-                Location = new Point(0, 136),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Size = new Size(762, 36),
+                Location = new Point(40, 248),
                 TextAlign = ContentAlignment.MiddleCenter
             };
-            pnlHero.Controls.Add(_lblStatusSubtitle);
+            page.Controls.Add(_lblStatusSubtitle);
 
-            // Главная большая кнопка Cloudflare One
+            // Большая центральная кнопка действия Cloudflare One («Подключить» / «Отключить»)
             _btnMainCta = new CloudflareButton() {
-                Text = "Включить защиту и туннель",
-                Font = new Font("Segoe UI", 10.2f, FontStyle.Bold),
-                Size = new Size(290, 42),
-                Location = new Point((pnlHero.Width - 290) / 2, 178),
+                Text = "Подключить",
+                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+                Size = new Size(220, 48),
+                Location = new Point((842 - 220) / 2, 298),
                 CornerRadius = 10,
+                GradientStart = Color.FromArgb(37, 99, 235),
+                GradientEnd = Color.FromArgb(29, 78, 216),
+                HoverStart = Color.FromArgb(59, 130, 246),
+                HoverEnd = Color.FromArgb(37, 99, 235),
+                ForeColor = Color.White,
                 HasGlow = true,
                 GlowColor = Color.FromArgb(80, 59, 130, 246)
             };
             _btnMainCta.Click += (s, e) => StartAudit();
-            pnlHero.Controls.Add(_btnMainCta);
+            page.Controls.Add(_btnMainCta);
 
             // Селектор режима под кнопкой
-            _pnlModeSelector = new Panel() {
-                Size = new Size(320, 26),
-                Location = new Point((pnlHero.Width - 320) / 2, 224),
-                BackColor = Color.Transparent
-            };
-            Label lblMode = new Label() {
-                Text = "РЕЖИМ: Трафик WFP + Cloudflare DoH (UDP/TCP)  ▼",
+            Label lblModeTag = new Label() {
+                Text = "Режим",
                 Font = new Font("Segoe UI", 8.2f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(148, 163, 184),
+                ForeColor = Color.FromArgb(100, 116, 139),
+                Size = new Size(340, 16),
+                Location = new Point((842 - 340) / 2, 360),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+            page.Controls.Add(lblModeTag);
+
+            _pnlModeSelector = new Panel() {
+                Size = new Size(340, 38),
+                Location = new Point((842 - 340) / 2, 380),
+                BackColor = Color.FromArgb(18, 21, 30),
+                Cursor = Cursors.Hand
+            };
+            _pnlModeSelector.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                Rectangle r = new Rectangle(0, 0, _pnlModeSelector.Width - 1, _pnlModeSelector.Height - 1);
+                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
+                    using (Pen pen = new Pen(Color.FromArgb(38, 44, 62), 1f)) {
+                        g.DrawPath(pen, p);
+                    }
+                }
+            };
+            Label lblModeText = new Label() {
+                Text = "Трафик WFP + Cloudflare DoH (UDP/TCP)  ▼",
+                Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(226, 232, 240),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleCenter,
                 Cursor = Cursors.Hand
             };
-            lblMode.Click += (s, e) => SelectTab(1);
-            _pnlModeSelector.Controls.Add(lblMode);
-            pnlHero.Controls.Add(_pnlModeSelector);
+            lblModeText.Click += (s, e) => SelectTab(1);
+            _pnlModeSelector.Click += (s, e) => SelectTab(1);
+            _pnlModeSelector.Controls.Add(lblModeText);
+            page.Controls.Add(_pnlModeSelector);
 
-            // Секция 3 карточек быстрого запуска Claude (X=24, Y=316, Width=794)
+            // 3 аккуратные карточки быстрого запуска Claude равной ширины (Строка ниже селектора)
             Panel pnlLaunchers = new Panel() {
-                Location = new Point(24, 316),
-                Size = new Size(794, 48),
+                Location = new Point(24, 446),
+                Size = new Size(794, 74),
                 BackColor = Color.Transparent
             };
             page.Controls.Add(pnlLaunchers);
 
-            _cardDesktop = new LauncherCard("Запустить Claude Desktop", 0) {
-                Location = new Point(0, 2),
-                Size = new Size(256, 44)
+            _cardDesktop = new LauncherCard("Claude Desktop", 0) {
+                Location = new Point(14, 4),
+                Size = new Size(242, 64)
             };
             _cardDesktop.CardClicked += () => LaunchClaudeDesktop();
             pnlLaunchers.Controls.Add(_cardDesktop);
 
-            _cardBrowser = new LauncherCard("Запустить в браузере", 1) {
-                Location = new Point(268, 2),
-                Size = new Size(256, 44)
+            _cardBrowser = new LauncherCard("Веб-версия claude.ai", 1) {
+                Location = new Point(276, 4),
+                Size = new Size(242, 64)
             };
             _cardBrowser.CardClicked += () => LaunchClaudeBrowser();
             pnlLaunchers.Controls.Add(_cardBrowser);
 
             _cardCli = new LauncherCard("Claude Code CLI", 2) {
-                Location = new Point(536, 2),
-                Size = new Size(258, 44)
+                Location = new Point(538, 4),
+                Size = new Size(242, 64)
             };
             _cardCli.CardClicked += () => LaunchClaudeCodeCli();
             pnlLaunchers.Controls.Add(_cardCli);
 
-            // Карточка Телеметрии HUD (5 чипов) (X=24, Y=372, Width=794)
+            // Нижний футер 1 в 1 как в Cloudflare One Client
+            Label lblCopy = new Label() {
+                Text = "2026.8.2115.0 | © 2026 Bogdan Zhukov (@bzhukov)",
+                Font = new Font("Segoe UI", 8.2f),
+                ForeColor = Color.FromArgb(80, 95, 120),
+                Location = new Point(0, 642),
+                Size = new Size(842, 22),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Cursor = Cursors.Hand
+            };
+            lblCopy.Click += (s, e) => ShowContactDialog();
+            page.Controls.Add(lblCopy);
+        }
+
+        // Вкладка 1: Подключение (Детальная диагностика шлюзов и телеметрия WFP/DoH/IP)
+        private void BuildDiagnosticsPage(Panel page) {
+            Label lblTitle = new Label() {
+                Text = "Детальная диагностика сетевых шлюзов и адаптеров",
+                Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(24, 16),
+                AutoSize = true
+            };
+            page.Controls.Add(lblTitle);
+
+            Label lblDesc = new Label() {
+                Text = "Контроль каждого уровня аппаратной изоляции: IP-геолокация, драйвер WFP, IPv6, DoH.",
+                Font = new Font("Segoe UI", 8.8f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(24, 38),
+                AutoSize = true
+            };
+            page.Controls.Add(lblDesc);
+
+            // Карточка Телеметрии HUD (5 чипов) перенесена в раздел «Подключение»
             Panel pnlTelemetry = new Panel() {
-                Location = new Point(24, 372),
-                Size = new Size(794, 118),
+                Location = new Point(24, 66),
+                Size = new Size(794, 114),
                 BackColor = Color.FromArgb(17, 20, 30)
             };
             pnlTelemetry.Paint += (s, pe) => {
@@ -1709,7 +1755,7 @@ namespace ProjectXO {
             page.Controls.Add(pnlTelemetry);
 
             Panel pnlTelemHeader = new Panel() {
-                Location = new Point(12, 8),
+                Location = new Point(12, 6),
                 Size = new Size(770, 28),
                 BackColor = Color.Transparent
             };
@@ -1756,84 +1802,36 @@ namespace ProjectXO {
             btnKillswitchTelem.Click += (s, e) => RunMemorySimulation();
             pnlTelemHeader.Controls.Add(btnKillswitchTelem);
 
-            // Сетка из 5 чипов телеметрии с идеальными промежутками (146px ширина, 10px шаг)
+            // Сетка из 5 чипов телеметрии
             _statChipIp = new TelemetryStatChip("Внешний IPv4 и страна", "Риск бана (Россия)", Color.FromArgb(248, 113, 113)) {
-                Location = new Point(12, 44)
+                Location = new Point(12, 40)
             };
             pnlTelemetry.Controls.Add(_statChipIp);
 
             _statChipWfp = new TelemetryStatChip("Брандмауэр ядра WFP", "Активен (10 правил)", Color.FromArgb(52, 211, 153)) {
-                Location = new Point(168, 44)
+                Location = new Point(168, 40)
             };
             pnlTelemetry.Controls.Add(_statChipWfp);
 
             _statChipGateway = new TelemetryStatChip("Шлюз Anthropic CF", "Таймаут", Color.FromArgb(248, 113, 113)) {
-                Location = new Point(324, 44)
+                Location = new Point(324, 40)
             };
             pnlTelemetry.Controls.Add(_statChipGateway);
 
             _statChipIpv6 = new TelemetryStatChip("Изоляция IPv6 & DNS", "Изолирован", Color.FromArgb(52, 211, 153)) {
-                Location = new Point(480, 44)
+                Location = new Point(480, 40)
             };
             pnlTelemetry.Controls.Add(_statChipIpv6);
 
             _statChipDoh = new TelemetryStatChip("DoH (Cloudflare 1.1.1.1)", "Активен", Color.FromArgb(52, 211, 153)) {
-                Location = new Point(636, 44)
+                Location = new Point(636, 40)
             };
             pnlTelemetry.Controls.Add(_statChipDoh);
 
-            // Нижний футер с предупреждением и копирайтом (X=24, Y=502, Width=794)
-            Panel pnlFooter = new Panel() {
-                Location = new Point(24, 502),
-                Size = new Size(794, 24),
-                BackColor = Color.Transparent
-            };
-            page.Controls.Add(pnlFooter);
-
-            _lblFooterNoteText = new Label() {
-                Text = "ВНИМАНИЕ: Туннель VPN не обнаружен. Запуск Claude разрешен под вашу ответственность.",
-                Font = new Font("Segoe UI", 8.2f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(248, 113, 113),
-                Location = new Point(0, 4),
-                AutoSize = true
-            };
-            pnlFooter.Controls.Add(_lblFooterNoteText);
-
-            Label lblCopy = new Label() {
-                Text = "2026.4.18 // © 2026 Bogdan Zhukov (@bzhukov)",
-                Font = new Font("Segoe UI", 8f),
-                ForeColor = Color.FromArgb(71, 85, 105),
-                Location = new Point(540, 4),
-                AutoSize = true,
-                Cursor = Cursors.Hand
-            };
-            lblCopy.Click += (s, e) => ShowContactDialog();
-            pnlFooter.Controls.Add(lblCopy);
-        }
-
-        // Вкладка 1: Защита и шлюзы (Детальные раскрывающиеся карточки)
-        private void BuildDiagnosticsPage(Panel page) {
-            Label lblTitle = new Label() {
-                Text = "Детальная диагностика сетевых шлюзов и адаптеров",
-                Font = new Font("Segoe UI", 11f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(248, 250, 252),
-                Location = new Point(24, 18),
-                AutoSize = true
-            };
-            page.Controls.Add(lblTitle);
-
-            Label lblDesc = new Label() {
-                Text = "Контроль каждого уровня аппаратной изоляции: IP-геолокация, драйвер WFP, IPv6, DoH.",
-                Font = new Font("Segoe UI", 8.8f),
-                ForeColor = Color.FromArgb(148, 163, 184),
-                Location = new Point(24, 42),
-                AutoSize = true
-            };
-            page.Controls.Add(lblDesc);
-
+            // Детальные карточки шлюзов (расположены под блоком HUD)
             _pnlDiagnostics = new FlowLayoutPanel() {
-                Location = new Point(24, 72),
-                Size = new Size(794, 580),
+                Location = new Point(24, 190),
+                Size = new Size(794, 470),
                 BackColor = Color.Transparent,
                 AutoScroll = true
             };
@@ -1871,26 +1869,25 @@ namespace ProjectXO {
 
             _cardIpv6Dns = new DiagnosticCard(
                 "Изоляция IPv6 и Smart DNS",
-                "Проверка...", Color.FromArgb(249, 115, 22), Color.FromArgb(40, 249, 115, 22),
-                "Предотвращает утечки адреса через параллельные DNS-запросы Windows к домашнему роутеру.",
-                "Сканирование физических сетевых карт...",
-                "Изолировать"
+                "Изолирован", Color.FromArgb(52, 211, 153), Color.FromArgb(40, 16, 185, 129),
+                "Предотвращение утечек реального адреса через незащищенные IPv6-маршруты и локальный DNS-сервер.",
+                "Сетевые адаптеры проверены, прямые утечки исключены.",
+                "Очистить кэш DNS"
             );
-            _cardIpv6Dns.ActionClicked += () => ApplyFirewallRulesSilent();
+            _cardIpv6Dns.ActionClicked += () => FlushDnsCache();
             _pnlDiagnostics.Controls.Add(_cardIpv6Dns);
 
             _cardDoh = new DiagnosticCard(
                 "Зашифрованный DoH (Cloudflare 1.1.1.1)",
-                "Активен", Color.FromArgb(52, 211, 153), Color.FromArgb(35, 16, 185, 129),
-                "DNS-запросы к доменам Claude шифруются через TLS 1.3. Провайдер не видит адреса.",
-                "Шлюз: https://1.1.1.1/dns-query",
+                "Активен", Color.FromArgb(52, 211, 153), Color.FromArgb(40, 16, 185, 129),
+                "Шифрование DNS-запросов к доменам Anthropic через защищенный HTTPS-канал.",
+                "Резолвер Cloudflare 1.1.1.1 функционирует штатно.",
                 "Тест DoH"
             );
             _cardDoh.ActionClicked += () => TestDoHResolver();
             _pnlDiagnostics.Controls.Add(_cardDoh);
         }
 
-        // Вкладка 2: Обход блокировок (Zapret DPI & DoH)
         private void BuildBypassPage(Panel page) {
             Label lblTitle = new Label() {
                 Text = "Службы обхода сетевых ограничений и DNS-инспекции",
@@ -2344,51 +2341,53 @@ namespace ProjectXO {
             _currentState = newState;
             bool isSafe = (newState == ProtectionState.Protected);
 
-            _heroCloud.State = newState;
-            _cardDesktop.SetState(isSafe);
-            _cardBrowser.SetState(isSafe);
-            _cardCli.SetState(isSafe);
+            if (_heroCloud != null) _heroCloud.State = newState;
+            if (_cardDesktop != null) _cardDesktop.SetState(isSafe);
+            if (_cardBrowser != null) _cardBrowser.SetState(isSafe);
+            if (_cardCli != null) _cardCli.SetState(isSafe);
 
             if (_appIconBox != null) _appIconBox.Invalidate();
             if (_brandLogoBox != null) _brandLogoBox.Invalidate();
 
             if (isSafe) {
-                _lblHeaderTitle.ForeColor = Color.FromArgb(52, 211, 153);
-                _lblStatusTitle.Text = "Защищено";
-                _lblStatusSubtitle.Text = "Все проверки пройдены: " + CurrentCountry + " (" + (CurrentPing > 0 ? CurrentPing + " мс" : "Шлюз OK") + ")\nТрафик надежно изолирован. Запуск Claude полностью безопасен.";
+                if (_lblStatusTitle != null) _lblStatusTitle.Text = "Подключено";
+                if (_lblStatusSubtitle != null) {
+                    _lblStatusSubtitle.Text = "Ваше интернет-подключение полностью защищено. Доступ к Claude открыт.";
+                }
 
-                _btnMainCta.Text = "Отключить защиту";
-                _btnMainCta.GradientStart = Color.FromArgb(5, 150, 105);
-                _btnMainCta.GradientEnd = Color.FromArgb(16, 185, 129);
-                _btnMainCta.HoverStart = Color.FromArgb(16, 185, 129);
-                _btnMainCta.HoverEnd = Color.FromArgb(4, 120, 87);
-                _btnMainCta.GlowColor = Color.FromArgb(80, 16, 185, 129);
-                _btnMainCta.Invalidate();
-
-                _lblFooterNoteText.Text = "ЗАЩИТА АКТИВНА: Все утечки заблокированы. Сетевой шлюз Anthropic изолирован.";
-                _lblFooterNoteText.ForeColor = Color.FromArgb(52, 211, 153);
+                if (_btnMainCta != null) {
+                    _btnMainCta.Text = "Отключить";
+                    _btnMainCta.GradientStart = Color.FromArgb(30, 34, 46);
+                    _btnMainCta.GradientEnd = Color.FromArgb(24, 27, 36);
+                    _btnMainCta.HoverStart = Color.FromArgb(42, 48, 64);
+                    _btnMainCta.HoverEnd = Color.FromArgb(30, 34, 46);
+                    _btnMainCta.GlowColor = Color.FromArgb(40, 16, 185, 129);
+                    _btnMainCta.Invalidate();
+                }
 
                 if (_trayIcon != null && _trayIcon.ContextMenu != null) {
-                    _trayIcon.ContextMenu.MenuItems[0].Text = "Статус: ЗАЩИЩЕНО (" + (CurrentPing > 0 ? CurrentPing + " мс" : "Активно") + ")";
+                    _trayIcon.ContextMenu.MenuItems[0].Text = "Статус: ПОДКЛЮЧЕНО (Защита активна)";
                 }
             } else {
-                _lblHeaderTitle.ForeColor = Color.FromArgb(249, 115, 22);
-                _lblStatusTitle.Text = "Вход с предупреждением";
-                _lblStatusSubtitle.Text = "Обнаружен IP-адрес: " + CurrentCountry + " (" + CurrentIp + ")\nТуннель VPN не активен — запуск Claude создает прямой риск блокировки аккаунта.";
+                if (_lblStatusTitle != null) _lblStatusTitle.Text = "Отключено";
+                if (_lblStatusSubtitle != null) {
+                    _lblStatusSubtitle.Text = string.IsNullOrEmpty(msg)
+                        ? "Ваше интернет-подключение не защищено от блокировок Claude."
+                        : ("Ваше интернет-подключение не конфиденциально: " + msg);
+                }
 
-                _btnMainCta.Text = "Включить защиту и туннель";
-                _btnMainCta.GradientStart = Color.FromArgb(59, 130, 246);
-                _btnMainCta.GradientEnd = Color.FromArgb(37, 99, 235);
-                _btnMainCta.HoverStart = Color.FromArgb(96, 165, 250);
-                _btnMainCta.HoverEnd = Color.FromArgb(37, 99, 235);
-                _btnMainCta.GlowColor = Color.FromArgb(80, 59, 130, 246);
-                _btnMainCta.Invalidate();
-
-                _lblFooterNoteText.Text = "ВНИМАНИЕ: Туннель VPN не обнаружен. Запуск Claude разрешен под вашу ответственность.";
-                _lblFooterNoteText.ForeColor = Color.FromArgb(248, 113, 113);
+                if (_btnMainCta != null) {
+                    _btnMainCta.Text = "Подключить";
+                    _btnMainCta.GradientStart = Color.FromArgb(37, 99, 235);
+                    _btnMainCta.GradientEnd = Color.FromArgb(29, 78, 216);
+                    _btnMainCta.HoverStart = Color.FromArgb(59, 130, 246);
+                    _btnMainCta.HoverEnd = Color.FromArgb(37, 99, 235);
+                    _btnMainCta.GlowColor = Color.FromArgb(80, 59, 130, 246);
+                    _btnMainCta.Invalidate();
+                }
 
                 if (_trayIcon != null && _trayIcon.ContextMenu != null) {
-                    _trayIcon.ContextMenu.MenuItems[0].Text = "Статус: ПРЕДУПРЕЖДЕНИЕ (VPN не подтвержден)";
+                    _trayIcon.ContextMenu.MenuItems[0].Text = "Статус: ОТКЛЮЧЕНО (VPN не подтвержден)";
                 }
             }
         }
@@ -2684,6 +2683,22 @@ namespace ProjectXO {
             });
         }
 
+        private void FlushDnsCache() {
+            try {
+                ProcessStartInfo psi = new ProcessStartInfo {
+                    FileName = "ipconfig",
+                    Arguments = "/flushdns",
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+                Process.Start(psi);
+                Log("DNS", "Системный кэш DNS успешно очищен (ipconfig /flushdns)", Color.FromArgb(52, 211, 153));
+                MessageBox.Show("Системный кэш DNS Windows успешно очищен.", "Очистка DNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            } catch (Exception ex) {
+                Log("ERR", "Ошибка очистки DNS: " + ex.Message, Color.FromArgb(239, 68, 68));
+            }
+        }
+
         private void TestDoHResolver() {
             Log("DOH", "Отправка проверочного запроса DNS-over-HTTPS к Cloudflare 1.1.1.1...", Color.FromArgb(148, 163, 184));
             ThreadPool.QueueUserWorkItem((st) => {
@@ -2954,14 +2969,12 @@ namespace ProjectXO {
                         // WFP
                         if (fwRulesCount > 0) {
                             _statChipWfp.UpdateVal("Активен (" + fwRulesCount + " правил)", Color.FromArgb(52, 211, 153));
-                            _lblWfpStatusText.Text = "WFP Ядро: " + fwRulesCount + " правил активны";
                             if (_cardFirewall != null) {
                                 _cardFirewall.UpdateStatus("Активен (" + fwRulesCount + " правил)", Color.FromArgb(52, 211, 153), Color.FromArgb(35, 16, 185, 129),
                                     "Ядро WFP изолирует подсети 160.79.104.0/23 на физических картах.");
                             }
                         } else {
                             _statChipWfp.UpdateVal("Требуется установка", Color.FromArgb(248, 113, 113));
-                            _lblWfpStatusText.Text = "WFP Ядро: Требуется установка";
                             if (_cardFirewall != null) {
                                 _cardFirewall.UpdateStatus("Требуется установка", Color.FromArgb(248, 113, 113), Color.FromArgb(35, 239, 68, 68),
                                     "Правила изоляции еще не внедрены. Нажмите «Применить правила».");
