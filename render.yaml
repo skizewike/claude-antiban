@@ -1,0 +1,7 @@
+services:
+  - type: worker
+    name: claudebarrier-bot
+    env: python
+    buildCommand: ""
+    startCommand: "python -u bot/bot.py"
+    autoDeploy: true
