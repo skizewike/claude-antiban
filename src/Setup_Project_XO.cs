@@ -15,12 +15,22 @@ namespace ProjectXO.Installer {
         private static extern bool SetDefaultDllDirectories(uint directoryFlags);
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern bool SetDllDirectory(string lpPathName);
+        [DllImport("user32.dll")]
+        private static extern bool SetProcessDPIAware();
+        [DllImport("shcore.dll")]
+        private static extern int SetProcessDpiAwareness(int awareness);
 
         [STAThread]
         public static void Main(string[] args) {
             try {
                 SetDllDirectory(string.Empty);
                 SetDefaultDllDirectories(0x00001000 | 0x00000800);
+            } catch { }
+
+            try {
+                if (Environment.OSVersion.Version.Major >= 6) {
+                    try { SetProcessDpiAwareness(2); } catch { SetProcessDPIAware(); }
+                }
             } catch { }
 
             if (args != null && Array.IndexOf(args, "/uninstall") >= 0) {

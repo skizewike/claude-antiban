@@ -14,6 +14,7 @@ using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -26,6 +27,12 @@ namespace ProjectXO {
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern bool SetDllDirectory(string lpPathName);
 
+        [DllImport("user32.dll")]
+        private static extern bool SetProcessDPIAware();
+
+        [DllImport("shcore.dll")]
+        private static extern int SetProcessDpiAwareness(int awareness);
+
         private const uint LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = 0x00001000;
         private const uint LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800;
 
@@ -34,6 +41,16 @@ namespace ProjectXO {
             try {
                 SetDllDirectory(string.Empty);
                 SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_SYSTEM32);
+            } catch { }
+
+            try {
+                if (Environment.OSVersion.Version.Major >= 6) {
+                    try {
+                        SetProcessDpiAwareness(2); // PROCESS_PER_MONITOR_DPI_AWARE
+                    } catch {
+                        SetProcessDPIAware();
+                    }
+                }
             } catch { }
 
             // 1. Проверка и автоматический запрос прав Администратора
@@ -454,7 +471,8 @@ namespace ProjectXO {
         public Color GlowColor { get; set; }
 
         public CloudflareButton() {
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.Selectable, true);
+            TabStop = true;
             CornerRadius = 10;
             GradientStart = Color.FromArgb(59, 130, 246);
             GradientEnd = Color.FromArgb(37, 99, 235);
@@ -491,6 +509,16 @@ namespace ProjectXO {
             _isPressed = false;
             Invalidate();
             base.OnMouseUp(mevent);
+        }
+
+        protected override void OnGotFocus(EventArgs e) {
+            Invalidate();
+            base.OnGotFocus(e);
+        }
+
+        protected override void OnLostFocus(EventArgs e) {
+            Invalidate();
+            base.OnLostFocus(e);
         }
 
         protected override void OnPaint(PaintEventArgs pevent) {
@@ -544,6 +572,15 @@ namespace ProjectXO {
                 }
             }
 
+            if (Focused && Enabled) {
+                using (GraphicsPath focusPath = GraphicsUtils.CreateRoundedRectangle(new Rectangle(2, 2, Width - 5, Height - 5), Math.Max(2, CornerRadius - 2))) {
+                    using (Pen focusPen = new Pen(Color.FromArgb(147, 197, 253), 1.5f)) {
+                        focusPen.DashStyle = DashStyle.Dot;
+                        g.DrawPath(focusPen, focusPath);
+                    }
+                }
+            }
+
             Color textColor = Enabled ? ForeColor : Color.FromArgb(100, 116, 139);
             TextRenderer.DrawText(g, Text, Font, ClientRectangle, textColor,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
@@ -581,10 +618,32 @@ namespace ProjectXO {
         }
 
         public WarpSegmentedFilterControl() {
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.Selectable, true);
+            TabStop = true;
             Size = new Size(320, 34);
             Font = new Font("Segoe UI", 8.8f, FontStyle.Bold);
             Cursor = Cursors.Hand;
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e) {
+            if (e.KeyCode == Keys.Left || e.KeyCode == Keys.Up) {
+                if (SelectedIndex > 0) SelectedIndex--;
+                e.Handled = true;
+            } else if (e.KeyCode == Keys.Right || e.KeyCode == Keys.Down) {
+                if (SelectedIndex < _items.Length - 1) SelectedIndex++;
+                e.Handled = true;
+            }
+            base.OnKeyDown(e);
+        }
+
+        protected override void OnGotFocus(EventArgs e) {
+            Invalidate();
+            base.OnGotFocus(e);
+        }
+
+        protected override void OnLostFocus(EventArgs e) {
+            Invalidate();
+            base.OnLostFocus(e);
         }
 
         protected override void OnMouseMove(MouseEventArgs e) {
@@ -693,7 +752,8 @@ namespace ProjectXO {
         }
 
         public WarpToggleSwitch() {
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor | ControlStyles.Selectable, true);
+            TabStop = true;
             Size = new Size(44, 22);
             Cursor = Cursors.Hand;
             BackColor = Color.Transparent;
@@ -702,6 +762,24 @@ namespace ProjectXO {
         protected override void OnClick(EventArgs e) {
             base.OnClick(e);
             Checked = !Checked;
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e) {
+            if (e.KeyCode == Keys.Space || e.KeyCode == Keys.Enter) {
+                Checked = !Checked;
+                e.Handled = true;
+            }
+            base.OnKeyDown(e);
+        }
+
+        protected override void OnGotFocus(EventArgs e) {
+            Invalidate();
+            base.OnGotFocus(e);
+        }
+
+        protected override void OnLostFocus(EventArgs e) {
+            Invalidate();
+            base.OnLostFocus(e);
         }
 
         protected override void OnPaint(PaintEventArgs e) {
@@ -716,6 +794,16 @@ namespace ProjectXO {
             using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, Height / 2)) {
                 using (SolidBrush b = new SolidBrush(bg)) g.FillPath(b, p);
                 using (Pen pen = new Pen(border, 1f)) g.DrawPath(pen, p);
+            }
+
+            if (Focused) {
+                using (Pen focusPen = new Pen(Color.FromArgb(147, 197, 253), 1f)) {
+                    focusPen.DashStyle = DashStyle.Dot;
+                    Rectangle fr = new Rectangle(1, 1, Width - 3, Height - 3);
+                    using (GraphicsPath fp = GraphicsUtils.CreateRoundedRectangle(fr, Height / 2)) {
+                        g.DrawPath(focusPen, fp);
+                    }
+                }
             }
 
             int thumbDiameter = Height - 6;
@@ -764,6 +852,17 @@ namespace ProjectXO {
 
         public void ResumeAnimation() {
             if (_animTimer != null && !_animTimer.Enabled) _animTimer.Start();
+        }
+
+        protected override void Dispose(bool disposing) {
+            if (disposing) {
+                if (_animTimer != null) {
+                    _animTimer.Stop();
+                    _animTimer.Dispose();
+                    _animTimer = null;
+                }
+            }
+            base.Dispose(disposing);
         }
 
         protected override void OnPaint(PaintEventArgs e) {
@@ -872,7 +971,8 @@ namespace ProjectXO {
             _iconType = iconType;
             _subTitle = "Вход заблокирован (нет VPN)";
 
-            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.Selectable, true);
+            TabStop = true;
             Size = new Size(240, 64);
             BackColor = Color.FromArgb(17, 20, 28);
             Cursor = Cursors.Hand;
@@ -901,6 +1001,24 @@ namespace ProjectXO {
             if (CardClicked != null) CardClicked();
         }
 
+        protected override void OnKeyDown(KeyEventArgs e) {
+            if (e.KeyCode == Keys.Space || e.KeyCode == Keys.Enter) {
+                if (CardClicked != null) CardClicked();
+                e.Handled = true;
+            }
+            base.OnKeyDown(e);
+        }
+
+        protected override void OnGotFocus(EventArgs e) {
+            Invalidate();
+            base.OnGotFocus(e);
+        }
+
+        protected override void OnLostFocus(EventArgs e) {
+            Invalidate();
+            base.OnLostFocus(e);
+        }
+
         protected override void OnPaint(PaintEventArgs e) {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -919,6 +1037,15 @@ namespace ProjectXO {
                 }
                 using (Pen pen = new Pen(border, 1f)) {
                     g.DrawPath(pen, p);
+                }
+            }
+
+            if (Focused) {
+                using (GraphicsPath fp = GraphicsUtils.CreateRoundedRectangle(new Rectangle(2, 2, Width - 5, Height - 5), 6)) {
+                    using (Pen focusPen = new Pen(Color.FromArgb(147, 197, 253), 1.5f)) {
+                        focusPen.DashStyle = DashStyle.Dot;
+                        g.DrawPath(focusPen, fp);
+                    }
                 }
             }
 
@@ -2407,7 +2534,7 @@ namespace ProjectXO {
 
             Panel cardTunnel = new Panel() {
                 Location = new Point(32, 196),
-                Size = new Size(786, 176),
+                Size = new Size(786, 220),
                 BackColor = Color.FromArgb(19, 22, 32)
             };
             cardTunnel.Paint += (s, pe) => {
@@ -2422,6 +2549,7 @@ namespace ProjectXO {
                     g.DrawLine(divPen, 20, 44, cardTunnel.Width - 20, 44);
                     g.DrawLine(divPen, 20, 88, cardTunnel.Width - 20, 88);
                     g.DrawLine(divPen, 20, 132, cardTunnel.Width - 20, 132);
+                    g.DrawLine(divPen, 20, 176, cardTunnel.Width - 20, 176);
                 }
             };
             page.Controls.Add(cardTunnel);
@@ -3499,7 +3627,7 @@ namespace ProjectXO {
                 }
 
                 if (_btnMainCta != null) {
-                    _btnMainCta.Text = "Отключить";
+                    _btnMainCta.Text = "Проверить защиту ✓";
                     _btnMainCta.GradientStart = Color.FromArgb(30, 34, 46);
                     _btnMainCta.GradientEnd = Color.FromArgb(24, 27, 36);
                     _btnMainCta.HoverStart = Color.FromArgb(42, 48, 64);
@@ -3527,7 +3655,7 @@ namespace ProjectXO {
                 }
 
                 if (_btnMainCta != null) {
-                    _btnMainCta.Text = isGeoBlocked ? "Сменить сервер VPN" : "Подключить";
+                    _btnMainCta.Text = isGeoBlocked ? "Сменить сервер VPN" : "Проверить защиту";
                     _btnMainCta.GradientStart = isGeoBlocked ? Color.FromArgb(220, 38, 38) : Color.FromArgb(37, 99, 235);
                     _btnMainCta.GradientEnd = isGeoBlocked ? Color.FromArgb(185, 28, 28) : Color.FromArgb(29, 78, 216);
                     _btnMainCta.HoverStart = isGeoBlocked ? Color.FromArgb(239, 68, 68) : Color.FromArgb(59, 130, 246);
@@ -4471,9 +4599,10 @@ namespace ProjectXO {
                         });
                         Log("IPV6-LEAK", string.Format("УТЕЧКА IPV6: Обнаружен глобальный адрес {0} на '{1}'. Запущен KillSwitch и деактивация ms_tcpip6.", leakIp, leakNic), Color.FromArgb(248, 113, 113));
                         try {
+                            string safeNic = Regex.Replace(leakNic ?? "", @"[^a-zA-Z0-9 _\-]", "");
                             ProcessStartInfo psi = new ProcessStartInfo {
                                 FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe"),
-                                Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"Disable-NetAdapterBinding -Name '" + leakNic.Replace("'", "") + "' -ComponentId ms_tcpip6 -Confirm:$false\"",
+                                Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"Disable-NetAdapterBinding -Name '" + safeNic + "' -ComponentId ms_tcpip6 -Confirm:$false\"",
                                 CreateNoWindow = true,
                                 UseShellExecute = false,
                                 WindowStyle = ProcessWindowStyle.Hidden
