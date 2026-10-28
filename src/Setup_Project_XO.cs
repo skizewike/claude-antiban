@@ -1,17 +1,19 @@
 using System;
 using System.IO;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Diagnostics;
 using System.Windows.Forms;
 using System.Security.Principal;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
 namespace ProjectXO.Installer {
     public class SetupProgram {
-        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto, SetLastError = true)]
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern bool SetDefaultDllDirectories(uint directoryFlags);
-        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto, SetLastError = true)]
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern bool SetDllDirectory(string lpPathName);
 
         [STAThread]
@@ -20,6 +22,7 @@ namespace ProjectXO.Installer {
                 SetDllDirectory(string.Empty);
                 SetDefaultDllDirectories(0x00001000 | 0x00000800);
             } catch { }
+
             if (args != null && Array.IndexOf(args, "/uninstall") >= 0) {
                 string uninstPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Uninstall_Project_XO.exe");
                 if (File.Exists(uninstPath)) {
@@ -52,63 +55,433 @@ namespace ProjectXO.Installer {
         }
     }
 
+    public class ModernDarkProgressBar : Control {
+        private int _value = 0;
+        public int Value {
+            get { return _value; }
+            set {
+                _value = Math.Max(0, Math.Min(100, value));
+                Invalidate();
+            }
+        }
+
+        public ModernDarkProgressBar() {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            Height = 14;
+        }
+
+        protected override void OnPaint(PaintEventArgs e) {
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
+            using (GraphicsPath p = SetupForm.CreateRoundedRect(r, 4)) {
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(22, 27, 41))) g.FillPath(b, p);
+                using (Pen pen = new Pen(Color.FromArgb(35, 43, 64), 1f)) g.DrawPath(pen, p);
+            }
+
+            if (_value > 0) {
+                int fillW = (int)((Width - 2) * (_value / 100.0));
+                if (fillW > 4) {
+                    Rectangle fillRect = new Rectangle(1, 1, fillW, Height - 2);
+                    using (GraphicsPath fp = SetupForm.CreateRoundedRect(fillRect, 3)) {
+                        using (LinearGradientBrush lgb = new LinearGradientBrush(fillRect, Color.FromArgb(37, 99, 235), Color.FromArgb(56, 189, 248), 0f)) {
+                            g.FillPath(lgb, fp);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public class SetupButton : Button {
+        private bool _isHovered = false;
+        private bool _isPressed = false;
+        public int CornerRadius { get; set; }
+        public Color GradientStart { get; set; }
+        public Color GradientEnd { get; set; }
+        public Color HoverStart { get; set; }
+        public Color HoverEnd { get; set; }
+        public Color BorderColor { get; set; }
+
+        public SetupButton() {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            CornerRadius = 7;
+            GradientStart = Color.FromArgb(37, 99, 235);
+            GradientEnd = Color.FromArgb(29, 78, 216);
+            HoverStart = Color.FromArgb(59, 130, 246);
+            HoverEnd = Color.FromArgb(37, 99, 235);
+            BorderColor = Color.Transparent;
+            FlatStyle = FlatStyle.Flat;
+            FlatAppearance.BorderSize = 0;
+            Font = new Font("Segoe UI", 9.2f, FontStyle.Bold);
+            ForeColor = Color.White;
+            Cursor = Cursors.Hand;
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { _isHovered = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { _isHovered = false; _isPressed = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseDown(MouseEventArgs mevent) { _isPressed = true; Invalidate(); base.OnMouseDown(mevent); }
+        protected override void OnMouseUp(MouseEventArgs mevent) { _isPressed = false; Invalidate(); base.OnMouseUp(mevent); }
+
+        protected override void OnPaint(PaintEventArgs pevent) {
+            Graphics g = pevent.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
+
+            Color c1 = _isPressed ? GradientEnd : (_isHovered ? HoverStart : GradientStart);
+            Color c2 = _isPressed ? GradientStart : (_isHovered ? HoverEnd : GradientEnd);
+
+            using (GraphicsPath p = SetupForm.CreateRoundedRect(r, CornerRadius)) {
+                if (c1 != Color.Transparent) {
+                    using (LinearGradientBrush lgb = new LinearGradientBrush(r, c1, c2, 90f)) {
+                        g.FillPath(lgb, p);
+                    }
+                }
+                if (BorderColor != Color.Transparent) {
+                    using (Pen pen = new Pen(BorderColor, 1f)) g.DrawPath(pen, p);
+                }
+            }
+
+            TextRenderer.DrawText(g, Text, Font, r, ForeColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        }
+    }
+
     public class SetupForm : Form {
-        private ProgressBar _pb;
+        [DllImport("user32.dll")]
+        public static extern bool ReleaseCapture();
+        [DllImport("user32.dll")]
+        public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+        [DllImport("Gdi32.dll", EntryPoint = "CreateRoundRectRgn")]
+        private static extern IntPtr CreateRoundRectRgn(int nLeftRect, int nTopRect, int nRightRect, int nBottomRect, int nWidthEllipse, int nHeightEllipse);
+
+        private TextBox _txtPath;
+        private ModernDarkProgressBar _pb;
         private Label _lblStatus;
-        private Button _btnInstall;
+        private SetupButton _btnInstall;
+        private SetupButton _btnCancel;
+        private Image _appIcon;
+        private string _targetDirectory;
+        private bool _isInstalling = false;
 
         public SetupForm() {
             Text = "Установка Claude Anti-Ban Barrier";
-            Width = 540;
-            Height = 390;
+            Width = 580;
+            Height = 460;
             StartPosition = FormStartPosition.CenterScreen;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
-            BackColor = Color.FromArgb(19, 20, 24);
+            FormBorderStyle = FormBorderStyle.None;
+            BackColor = Color.FromArgb(13, 15, 21);
             ForeColor = Color.White;
-            Font = new Font("Segoe UI", 9.5f);
+            Font = new Font("Segoe UI", 9f);
+            DoubleBuffered = true;
 
             try {
-                using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("app_icon.ico")) {
-                    if (s != null) Icon = new Icon(s);
+                Region = Region.FromHrgn(CreateRoundRectRgn(0, 0, Width, Height, 12, 12));
+            } catch { }
+
+            LoadIconResource();
+            BuildUI();
+        }
+
+        private void LoadIconResource() {
+            try {
+                using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("app_icon.png")) {
+                    if (s != null) _appIcon = Image.FromStream(s);
                 }
             } catch {}
+            if (_appIcon == null) {
+                try {
+                    using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("app_icon.ico")) {
+                        if (s != null) {
+                            Icon ico = new Icon(s);
+                            _appIcon = ico.ToBitmap();
+                            Icon = ico;
+                        }
+                    }
+                } catch {}
+            }
+        }
 
-            Panel pnl = new Panel() { Dock = DockStyle.Top, Height = 75, BackColor = Color.FromArgb(14, 15, 18) };
-            Controls.Add(pnl);
+        protected override void OnPaint(PaintEventArgs e) {
+            base.OnPaint(e);
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (Pen borderPen = new Pen(Color.FromArgb(34, 39, 58), 1f)) {
+                g.DrawRectangle(borderPen, 0, 0, Width - 1, Height - 1);
+            }
+        }
 
-            Label l1 = new Label() { Text = "CLAUDE ANTI-BAN BARRIER", Font = new Font("Segoe UI", 12, FontStyle.Bold), ForeColor = Color.FromArgb(204, 120, 92), Location = new Point(20, 14), AutoSize = true };
-            pnl.Controls.Add(l1);
-            Label l2 = new Label() { Text = "Мастер развертывания WFP-барьера и превентивной защиты // ClaudeBarrier Security Team", Font = new Font("Segoe UI", 8.5f), ForeColor = Color.FromArgb(161, 161, 170), Location = new Point(22, 42), AutoSize = true };
-            pnl.Controls.Add(l2);
+        public static GraphicsPath CreateRoundedRect(Rectangle r, int radius) {
+            GraphicsPath path = new GraphicsPath();
+            int d = radius * 2;
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
 
-            Label lInfo = new Label() {
-                Text = "Программа будет установлена в:\nC:\\Program Files\\Project XO\n\nКомпоненты установки:\n• Исполняемый файл ProjectXO.exe и деинсталлятор Uninstall_Project_XO.exe\n• Ярлыки на Рабочем столе и в меню Пуск\n• Правила Брандмауэра Windows для изоляции подсетей Anthropic на физических картах\n• Регистрация в разделе «Программы и компоненты» панели управления Windows\n• Круглосуточная защита трафика в системном трее",
-                Location = new Point(25, 90),
-                Size = new Size(480, 140),
-                ForeColor = Color.FromArgb(212, 212, 216)
+        private void BuildUI() {
+            Panel pnlTitle = new Panel() {
+                Location = new Point(0, 0),
+                Size = new Size(Width, 48),
+                BackColor = Color.FromArgb(16, 18, 26)
             };
-            Controls.Add(lInfo);
+            pnlTitle.MouseDown += (s, e) => {
+                if (e.Button == MouseButtons.Left) {
+                    ReleaseCapture();
+                    SendMessage(Handle, 0xA1, 0x2, 0);
+                }
+            };
+            Controls.Add(pnlTitle);
 
-            _pb = new ProgressBar() { Location = new Point(25, 245), Size = new Size(475, 18), Visible = false };
+            PictureBox picIcon = new PictureBox() {
+                Location = new Point(14, 10),
+                Size = new Size(28, 28),
+                SizeMode = PictureBoxSizeMode.Zoom,
+                Image = _appIcon,
+                BackColor = Color.Transparent
+            };
+            picIcon.MouseDown += (s, e) => {
+                if (e.Button == MouseButtons.Left) {
+                    ReleaseCapture();
+                    SendMessage(Handle, 0xA1, 0x2, 0);
+                }
+            };
+            pnlTitle.Controls.Add(picIcon);
+
+            Label lblHeadTitle = new Label() {
+                Text = "CLAUDE ANTI-BAN BARRIER",
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(48, 8),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            lblHeadTitle.MouseDown += (s, e) => {
+                if (e.Button == MouseButtons.Left) {
+                    ReleaseCapture();
+                    SendMessage(Handle, 0xA1, 0x2, 0);
+                }
+            };
+            pnlTitle.Controls.Add(lblHeadTitle);
+
+            Label lblHeadSub = new Label() {
+                Text = "Мастер установки автономного ядра безопасности // Релиз v6.0.1",
+                Font = new Font("Segoe UI", 7.8f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(49, 27),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            lblHeadSub.MouseDown += (s, e) => {
+                if (e.Button == MouseButtons.Left) {
+                    ReleaseCapture();
+                    SendMessage(Handle, 0xA1, 0x2, 0);
+                }
+            };
+            pnlTitle.Controls.Add(lblHeadSub);
+
+            Label btnClose = new Label() {
+                Text = "✕",
+                Font = new Font("Segoe UI", 10f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(Width - 42, 10),
+                Size = new Size(28, 28),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Cursor = Cursors.Hand,
+                BackColor = Color.Transparent
+            };
+            btnClose.MouseEnter += (s, e) => { btnClose.BackColor = Color.FromArgb(239, 68, 68); btnClose.ForeColor = Color.White; };
+            btnClose.MouseLeave += (s, e) => { btnClose.BackColor = Color.Transparent; btnClose.ForeColor = Color.FromArgb(148, 163, 184); };
+            btnClose.Click += (s, e) => {
+                if (!_isInstalling) Close();
+            };
+            pnlTitle.Controls.Add(btnClose);
+
+            Panel cardPath = new Panel() {
+                Location = new Point(24, 64),
+                Size = new Size(532, 68),
+                BackColor = Color.FromArgb(19, 22, 34)
+            };
+            cardPath.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, cardPath.Width - 1, cardPath.Height - 1);
+                using (GraphicsPath p = CreateRoundedRect(r, 8)) {
+                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 58), 1f)) g.DrawPath(pen, p);
+                }
+            };
+            Controls.Add(cardPath);
+
+            Label lblPathTitle = new Label() {
+                Text = "ПАПКА УСТАНОВКИ",
+                Font = new Font("Segoe UI", 7.8f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(14, 10),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardPath.Controls.Add(lblPathTitle);
+
+            _targetDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Claude Anti-Ban Barrier");
+            _txtPath = new TextBox() {
+                Text = _targetDirectory,
+                Location = new Point(14, 32),
+                Size = new Size(405, 24),
+                BackColor = Color.FromArgb(13, 15, 23),
+                ForeColor = Color.FromArgb(241, 245, 249),
+                BorderStyle = BorderStyle.FixedSingle,
+                Font = new Font("Segoe UI", 9f),
+                ReadOnly = true
+            };
+            cardPath.Controls.Add(_txtPath);
+
+            SetupButton btnBrowse = new SetupButton() {
+                Text = "Обзор...",
+                Location = new Point(428, 30),
+                Size = new Size(90, 27),
+                CornerRadius = 5,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                GradientStart = Color.FromArgb(28, 33, 48),
+                GradientEnd = Color.FromArgb(20, 24, 36),
+                HoverStart = Color.FromArgb(42, 50, 72),
+                HoverEnd = Color.FromArgb(32, 38, 56),
+                BorderColor = Color.FromArgb(46, 56, 82),
+                ForeColor = Color.FromArgb(226, 232, 240)
+            };
+            btnBrowse.Click += (s, e) => {
+                using (FolderBrowserDialog fbd = new FolderBrowserDialog()) {
+                    fbd.Description = "Выберите папку для установки Claude Anti-Ban Barrier:";
+                    fbd.SelectedPath = _targetDirectory;
+                    if (fbd.ShowDialog() == DialogResult.OK) {
+                        _targetDirectory = fbd.SelectedPath;
+                        _txtPath.Text = _targetDirectory;
+                    }
+                }
+            };
+            cardPath.Controls.Add(btnBrowse);
+
+            Panel cardFeatures = new Panel() {
+                Location = new Point(24, 142),
+                Size = new Size(532, 172),
+                BackColor = Color.FromArgb(19, 22, 34)
+            };
+            cardFeatures.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, cardFeatures.Width - 1, cardFeatures.Height - 1);
+                using (GraphicsPath p = CreateRoundedRect(r, 8)) {
+                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 58), 1f)) g.DrawPath(pen, p);
+                }
+            };
+            Controls.Add(cardFeatures);
+
+            Label lblFeatTitle = new Label() {
+                Text = "КОМПОНЕНТЫ СИСТЕМЫ И АВТОНОМНОГО ЯДРА",
+                Font = new Font("Segoe UI", 7.8f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(14, 10),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardFeatures.Controls.Add(lblFeatTitle);
+
+            string[] features = new string[] {
+                "Фильтрация прямых подсетей Anthropic (160.79.104.0/23) в ядре WFP",
+                "Аварийный сокет-перехватчик и Kill-Switch сессий Claude при обрыве туннеля",
+                "Изоляция физических адаптеров и предотвращение утечек IPv6 / Smart DNS",
+                "Фоновый агент в системном трее Windows и автозапуск в защищенном режиме",
+                "Создание ярлыков на Рабочем столе и в главном меню программ Windows"
+            };
+
+            int yOffset = 34;
+            for (int i = 0; i < features.Length; i++) {
+                Panel row = new Panel() {
+                    Location = new Point(14, yOffset),
+                    Size = new Size(504, 24),
+                    BackColor = Color.Transparent
+                };
+                Label check = new Label() {
+                    Text = "✓",
+                    Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                    ForeColor = Color.FromArgb(52, 211, 153),
+                    Location = new Point(0, 0),
+                    Size = new Size(20, 20),
+                    TextAlign = ContentAlignment.MiddleLeft
+                };
+                row.Controls.Add(check);
+                Label desc = new Label() {
+                    Text = features[i],
+                    Font = new Font("Segoe UI", 8.4f),
+                    ForeColor = Color.FromArgb(226, 232, 240),
+                    Location = new Point(22, 2),
+                    Size = new Size(480, 20),
+                    TextAlign = ContentAlignment.MiddleLeft
+                };
+                row.Controls.Add(desc);
+                cardFeatures.Controls.Add(row);
+                yOffset += 26;
+            }
+
+            _pb = new ModernDarkProgressBar() {
+                Location = new Point(24, 326),
+                Size = new Size(532, 14),
+                Visible = false
+            };
             Controls.Add(_pb);
 
-            _lblStatus = new Label() { Location = new Point(25, 270), AutoSize = true, ForeColor = Color.FromArgb(204, 120, 92), Visible = false };
+            _lblStatus = new Label() {
+                Text = "Готово к установке. Нажмите «Установить» для начала развертывания.",
+                Font = new Font("Segoe UI", 8.2f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(26, 348),
+                Size = new Size(528, 20),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
             Controls.Add(_lblStatus);
 
-            _btnInstall = new Button() {
+            _btnInstall = new SetupButton() {
                 Text = "Установить",
-                Size = new Size(180, 40),
-                Location = new Point(320, 295),
-                BackColor = Color.FromArgb(204, 120, 92),
-                ForeColor = Color.White,
+                Location = new Point(376, 386),
+                Size = new Size(180, 42),
+                CornerRadius = 7,
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                FlatStyle = FlatStyle.Flat,
-                Cursor = Cursors.Hand
+                GradientStart = Color.FromArgb(37, 99, 235),
+                GradientEnd = Color.FromArgb(29, 78, 216),
+                HoverStart = Color.FromArgb(59, 130, 246),
+                HoverEnd = Color.FromArgb(37, 99, 235),
+                BorderColor = Color.Transparent,
+                ForeColor = Color.White
             };
-            _btnInstall.FlatAppearance.BorderSize = 0;
             _btnInstall.Click += (s, e) => DoInstall();
             Controls.Add(_btnInstall);
+
+            _btnCancel = new SetupButton() {
+                Text = "Отмена",
+                Location = new Point(252, 386),
+                Size = new Size(114, 42),
+                CornerRadius = 7,
+                Font = new Font("Segoe UI", 9f),
+                GradientStart = Color.FromArgb(24, 28, 40),
+                GradientEnd = Color.FromArgb(18, 21, 32),
+                HoverStart = Color.FromArgb(36, 42, 60),
+                HoverEnd = Color.FromArgb(26, 30, 44),
+                BorderColor = Color.FromArgb(42, 50, 72),
+                ForeColor = Color.FromArgb(148, 163, 184)
+            };
+            _btnCancel.Click += (s, e) => Close();
+            Controls.Add(_btnCancel);
+        }
+
+        private void SetProgress(int val, string text) {
+            if (InvokeRequired) {
+                BeginInvoke(new Action(() => SetProgress(val, text)));
+                return;
+            }
+            _pb.Value = val;
+            _lblStatus.Text = text;
         }
 
         private void ExtractResourceToFile(string resName, string destPath) {
@@ -134,69 +507,76 @@ namespace ProjectXO.Installer {
         }
 
         private void DoInstall() {
+            _isInstalling = true;
             _btnInstall.Enabled = false;
+            _btnCancel.Enabled = false;
             _pb.Visible = true;
-            _lblStatus.Visible = true;
             _pb.Value = 10;
-            _lblStatus.Text = "Подготовка директории установки...";
+            _lblStatus.Text = "Подготовка системной директории...";
+            _lblStatus.ForeColor = Color.FromArgb(56, 189, 248);
 
-            try {
-                string targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Project XO");
-                if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
+            System.Threading.ThreadPool.QueueUserWorkItem((st) => {
+                try {
+                    string targetDir = _targetDirectory;
+                    if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
 
-                _pb.Value = 30;
-                _lblStatus.Text = "Развертывание бинарных модулей...";
-                string destExe = Path.Combine(targetDir, "ProjectXO.exe");
-                string destUninst = Path.Combine(targetDir, "Uninstall_Project_XO.exe");
-                string destIco = Path.Combine(targetDir, "app_icon.ico");
+                    SetProgress(30, "Развертывание исполняемых файлов ядра...");
+                    string destExe = Path.Combine(targetDir, "ClaudeBarrier.exe");
+                    string legacyExe = Path.Combine(targetDir, "ProjectXO.exe");
+                    string destUninst = Path.Combine(targetDir, "Uninstall_Project_XO.exe");
+                    string destIco = Path.Combine(targetDir, "app_icon.ico");
 
-                ExtractResourceToFile("ProjectXO.exe", destExe);
-                ExtractResourceToFile("Uninstall_Project_XO.exe", destUninst);
-                ExtractResourceToFile("app_icon.ico", destIco);
+                    ExtractResourceToFile("ProjectXO.exe", destExe);
+                    try { File.Copy(destExe, legacyExe, true); } catch {}
+                    ExtractResourceToFile("Uninstall_Project_XO.exe", destUninst);
+                    ExtractResourceToFile("app_icon.ico", destIco);
 
-                string sourceCfg = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "claude_shield.cfg");
-                string destCfg = Path.Combine(targetDir, "claude_shield.cfg");
-                if (File.Exists(sourceCfg)) File.Copy(sourceCfg, destCfg, true);
+                    SetProgress(60, "Создание ярлыков в системе...");
+                    string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                    CreateShortcut(destExe, Path.Combine(desktop, "Claude Anti-Ban Barrier.lnk"), destIco);
 
-                _pb.Value = 60;
-                _lblStatus.Text = "Создание ярлыков рабочего стола...";
-                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                CreateShortcut(destExe, Path.Combine(desktop, "Project XO.lnk"), destIco);
+                    string startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "Claude Anti-Ban Barrier");
+                    if (!Directory.Exists(startMenu)) Directory.CreateDirectory(startMenu);
+                    CreateShortcut(destExe, Path.Combine(startMenu, "Claude Anti-Ban Barrier.lnk"), destIco);
+                    CreateShortcut(destUninst, Path.Combine(startMenu, "Удалить Claude Barrier.lnk"), destIco);
 
-                string startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "Project XO");
-                if (!Directory.Exists(startMenu)) Directory.CreateDirectory(startMenu);
-                CreateShortcut(destExe, Path.Combine(startMenu, "Project XO.lnk"), destIco);
-                CreateShortcut(destUninst, Path.Combine(startMenu, "Удалить Project XO.lnk"), destIco);
+                    SetProgress(80, "Регистрация программы в панели управления Windows...");
+                    RegisterUninstall(targetDir, destExe, destUninst);
 
-                _pb.Value = 80;
-                _lblStatus.Text = "Регистрация в реестре Windows...";
-                RegisterUninstall(targetDir, destExe, destUninst);
+                    SetProgress(90, "Активация правил Брандмауэра WFP ядра...");
+                    ApplyFirewallRules();
 
-                _pb.Value = 90;
-                _lblStatus.Text = "Применение правил Брандмауэра WFP...";
-                ApplyFirewallRules();
-
-                _pb.Value = 100;
-                _lblStatus.Text = "Установка успешно завершена!";
-                _btnInstall.Text = "Запустить";
-                _btnInstall.Enabled = true;
-                _btnInstall.Click -= (s, e) => DoInstall();
-                _btnInstall.Click += (s, e) => {
-                    Process.Start(destExe);
-                    Close();
-                };
-            } catch (Exception ex) {
-                MessageBox.Show("Ошибка при установке: " + ex.Message, "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                _btnInstall.Enabled = true;
-            }
+                    SetProgress(100, "Установка успешно завершена! Система готова к запуску.");
+                    Invoke(new Action(() => {
+                        _lblStatus.ForeColor = Color.FromArgb(52, 211, 153);
+                        _btnInstall.Text = "Запустить";
+                        _btnInstall.Enabled = true;
+                        _btnInstall.Click -= (s, e) => DoInstall();
+                        _btnInstall.Click += (s, e) => {
+                            try { Process.Start(destExe); } catch {}
+                            Close();
+                        };
+                        _btnCancel.Text = "Закрыть";
+                        _btnCancel.Enabled = true;
+                    }));
+                } catch (Exception ex) {
+                    Invoke(new Action(() => {
+                        _lblStatus.Text = "Ошибка установки: " + ex.Message;
+                        _lblStatus.ForeColor = Color.FromArgb(248, 113, 113);
+                        _btnInstall.Enabled = true;
+                        _btnCancel.Enabled = true;
+                        MessageBox.Show("Ошибка при установке: " + ex.Message, "Ошибка установки", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }));
+                }
+            });
         }
 
         private void RegisterUninstall(string installDir, string mainExe, string uninstallerExe) {
             try {
-                using (RegistryKey rk = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ProjectXO")) {
+                using (RegistryKey rk = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeBarrier")) {
                     if (rk != null) {
                         rk.SetValue("DisplayName", "Claude Anti-Ban Barrier");
-                        rk.SetValue("DisplayVersion", "5.0.0");
+                        rk.SetValue("DisplayVersion", "6.0.1");
                         rk.SetValue("Publisher", "ClaudeBarrier Security Team");
                         rk.SetValue("DisplayIcon", mainExe + ",0");
                         rk.SetValue("UninstallString", "\"" + uninstallerExe + "\"");

@@ -1,21 +1,19 @@
 using System;
 using System.IO;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Diagnostics;
 using System.Windows.Forms;
+using System.Security.Principal;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
-namespace ProjectXO {
-    public class UninstallerForm : Form {
-        private ProgressBar _pb;
-        private Label _lblStatus;
-        private TextBox _txtLog;
-        private Button _btnUninstall;
-        private Button _btnClose;
-
-        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto, SetLastError = true)]
+namespace ProjectXO.Uninstaller {
+    public class UninstallerProgram {
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern bool SetDefaultDllDirectories(uint directoryFlags);
-        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto, SetLastError = true)]
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern bool SetDllDirectory(string lpPathName);
 
         [STAThread]
@@ -24,104 +22,346 @@ namespace ProjectXO {
                 SetDllDirectory(string.Empty);
                 SetDefaultDllDirectories(0x00001000 | 0x00000800);
             } catch { }
+
+            WindowsPrincipal principal = new WindowsPrincipal(WindowsIdentity.GetCurrent());
+            if (!principal.IsInRole(WindowsBuiltInRole.Administrator)) {
+                try {
+                    ProcessStartInfo psi = new ProcessStartInfo {
+                        FileName = Application.ExecutablePath,
+                        Verb = "runas",
+                        UseShellExecute = true
+                    };
+                    Process.Start(psi);
+                    return;
+                } catch {
+                    MessageBox.Show("Для деинсталляции требуются права администратора.", "Claude Anti-Ban Barrier", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+            }
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new UninstallerForm());
         }
+    }
+
+    public class ModernDarkProgressBar : Control {
+        private int _value = 0;
+        public int Value {
+            get { return _value; }
+            set {
+                _value = Math.Max(0, Math.Min(100, value));
+                Invalidate();
+            }
+        }
+
+        public ModernDarkProgressBar() {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            Height = 14;
+        }
+
+        protected override void OnPaint(PaintEventArgs e) {
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
+            using (GraphicsPath p = UninstallerForm.CreateRoundedRect(r, 4)) {
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(22, 27, 41))) g.FillPath(b, p);
+                using (Pen pen = new Pen(Color.FromArgb(35, 43, 64), 1f)) g.DrawPath(pen, p);
+            }
+
+            if (_value > 0) {
+                int fillW = (int)((Width - 2) * (_value / 100.0));
+                if (fillW > 4) {
+                    Rectangle fillRect = new Rectangle(1, 1, fillW, Height - 2);
+                    using (GraphicsPath fp = UninstallerForm.CreateRoundedRect(fillRect, 3)) {
+                        using (LinearGradientBrush lgb = new LinearGradientBrush(fillRect, Color.FromArgb(220, 38, 38), Color.FromArgb(248, 113, 113), 0f)) {
+                            g.FillPath(lgb, fp);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public class UninstButton : Button {
+        private bool _isHovered = false;
+        private bool _isPressed = false;
+        public int CornerRadius { get; set; }
+        public Color GradientStart { get; set; }
+        public Color GradientEnd { get; set; }
+        public Color HoverStart { get; set; }
+        public Color HoverEnd { get; set; }
+        public Color BorderColor { get; set; }
+
+        public UninstButton() {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            CornerRadius = 7;
+            GradientStart = Color.FromArgb(220, 38, 38);
+            GradientEnd = Color.FromArgb(185, 28, 28);
+            HoverStart = Color.FromArgb(239, 68, 68);
+            HoverEnd = Color.FromArgb(220, 38, 38);
+            BorderColor = Color.Transparent;
+            FlatStyle = FlatStyle.Flat;
+            FlatAppearance.BorderSize = 0;
+            Font = new Font("Segoe UI", 9.2f, FontStyle.Bold);
+            ForeColor = Color.White;
+            Cursor = Cursors.Hand;
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { _isHovered = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { _isHovered = false; _isPressed = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseDown(MouseEventArgs mevent) { _isPressed = true; Invalidate(); base.OnMouseDown(mevent); }
+        protected override void OnMouseUp(MouseEventArgs mevent) { _isPressed = false; Invalidate(); base.OnMouseUp(mevent); }
+
+        protected override void OnPaint(PaintEventArgs pevent) {
+            Graphics g = pevent.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
+
+            Color c1 = _isPressed ? GradientEnd : (_isHovered ? HoverStart : GradientStart);
+            Color c2 = _isPressed ? GradientStart : (_isHovered ? HoverEnd : GradientEnd);
+
+            using (GraphicsPath p = UninstallerForm.CreateRoundedRect(r, CornerRadius)) {
+                if (c1 != Color.Transparent) {
+                    using (LinearGradientBrush lgb = new LinearGradientBrush(r, c1, c2, 90f)) {
+                        g.FillPath(lgb, p);
+                    }
+                }
+                if (BorderColor != Color.Transparent) {
+                    using (Pen pen = new Pen(BorderColor, 1f)) g.DrawPath(pen, p);
+                }
+            }
+
+            TextRenderer.DrawText(g, Text, Font, r, ForeColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        }
+    }
+
+    public class UninstallerForm : Form {
+        [DllImport("user32.dll")]
+        public static extern bool ReleaseCapture();
+        [DllImport("user32.dll")]
+        public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+        [DllImport("Gdi32.dll", EntryPoint = "CreateRoundRectRgn")]
+        private static extern IntPtr CreateRoundRectRgn(int nLeftRect, int nTopRect, int nRightRect, int nBottomRect, int nWidthEllipse, int nHeightEllipse);
+
+        private ModernDarkProgressBar _pb;
+        private Label _lblStatus;
+        private TextBox _txtLog;
+        private UninstButton _btnUninstall;
+        private UninstButton _btnClose;
+        private Image _appIcon;
+        private bool _isUninstalling = false;
 
         public UninstallerForm() {
             Text = "Деинсталлятор Claude Anti-Ban Barrier";
             Width = 560;
             Height = 440;
             StartPosition = FormStartPosition.CenterScreen;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
-            BackColor = Color.FromArgb(19, 20, 24);
+            FormBorderStyle = FormBorderStyle.None;
+            BackColor = Color.FromArgb(13, 15, 21);
             ForeColor = Color.White;
-            Font = new Font("Segoe UI", 9.5f);
+            Font = new Font("Segoe UI", 9f);
+            DoubleBuffered = true;
 
+            try {
+                Region = Region.FromHrgn(CreateRoundRectRgn(0, 0, Width, Height, 12, 12));
+            } catch { }
+
+            LoadIconResource();
             BuildUI();
         }
 
+        private void LoadIconResource() {
+            try {
+                using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("app_icon.png")) {
+                    if (s != null) _appIcon = Image.FromStream(s);
+                }
+            } catch {}
+            if (_appIcon == null) {
+                try {
+                    using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("app_icon.ico")) {
+                        if (s != null) {
+                            Icon ico = new Icon(s);
+                            _appIcon = ico.ToBitmap();
+                            Icon = ico;
+                        }
+                    }
+                } catch {}
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e) {
+            base.OnPaint(e);
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (Pen borderPen = new Pen(Color.FromArgb(34, 39, 58), 1f)) {
+                g.DrawRectangle(borderPen, 0, 0, Width - 1, Height - 1);
+            }
+        }
+
+        public static GraphicsPath CreateRoundedRect(Rectangle r, int radius) {
+            GraphicsPath path = new GraphicsPath();
+            int d = radius * 2;
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
         private void BuildUI() {
-            Panel pnlHeader = new Panel() {
-                Dock = DockStyle.Top,
-                Height = 75,
-                BackColor = Color.FromArgb(14, 15, 18)
+            Panel pnlTitle = new Panel() {
+                Location = new Point(0, 0),
+                Size = new Size(Width, 48),
+                BackColor = Color.FromArgb(16, 18, 26)
             };
-            Controls.Add(pnlHeader);
+            pnlTitle.MouseDown += (s, e) => {
+                if (e.Button == MouseButtons.Left) {
+                    ReleaseCapture();
+                    SendMessage(Handle, 0xA1, 0x2, 0);
+                }
+            };
+            Controls.Add(pnlTitle);
 
-            Label lblTitle = new Label() {
+            PictureBox picIcon = new PictureBox() {
+                Location = new Point(14, 10),
+                Size = new Size(28, 28),
+                SizeMode = PictureBoxSizeMode.Zoom,
+                Image = _appIcon,
+                BackColor = Color.Transparent
+            };
+            picIcon.MouseDown += (s, e) => {
+                if (e.Button == MouseButtons.Left) {
+                    ReleaseCapture();
+                    SendMessage(Handle, 0xA1, 0x2, 0);
+                }
+            };
+            pnlTitle.Controls.Add(picIcon);
+
+            Label lblHeadTitle = new Label() {
                 Text = "УДАЛЕНИЕ CLAUDE ANTI-BAN BARRIER",
-                Font = new Font("Segoe UI", 12f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(204, 120, 92),
-                Location = new Point(20, 14),
-                AutoSize = true
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(48, 8),
+                AutoSize = true,
+                BackColor = Color.Transparent
             };
-            pnlHeader.Controls.Add(lblTitle);
+            lblHeadTitle.MouseDown += (s, e) => {
+                if (e.Button == MouseButtons.Left) {
+                    ReleaseCapture();
+                    SendMessage(Handle, 0xA1, 0x2, 0);
+                }
+            };
+            pnlTitle.Controls.Add(lblHeadTitle);
 
-            Label lblSub = new Label() {
-                Text = "Откат правил WFP, включение IPv6 и очистка системных записей",
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = Color.FromArgb(161, 161, 170),
-                Location = new Point(22, 42),
-                AutoSize = true
+            Label lblHeadSub = new Label() {
+                Text = "Откат правил WFP, включение IPv6 и полная очистка записей системы",
+                Font = new Font("Segoe UI", 7.8f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(49, 27),
+                AutoSize = true,
+                BackColor = Color.Transparent
             };
-            pnlHeader.Controls.Add(lblSub);
+            lblHeadSub.MouseDown += (s, e) => {
+                if (e.Button == MouseButtons.Left) {
+                    ReleaseCapture();
+                    SendMessage(Handle, 0xA1, 0x2, 0);
+                }
+            };
+            pnlTitle.Controls.Add(lblHeadSub);
+
+            Label btnCloseWin = new Label() {
+                Text = "✕",
+                Font = new Font("Segoe UI", 10f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(Width - 42, 10),
+                Size = new Size(28, 28),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Cursor = Cursors.Hand,
+                BackColor = Color.Transparent
+            };
+            btnCloseWin.MouseEnter += (s, e) => { btnCloseWin.BackColor = Color.FromArgb(239, 68, 68); btnCloseWin.ForeColor = Color.White; };
+            btnCloseWin.MouseLeave += (s, e) => { btnCloseWin.BackColor = Color.Transparent; btnCloseWin.ForeColor = Color.FromArgb(148, 163, 184); };
+            btnCloseWin.Click += (s, e) => {
+                if (!_isUninstalling) Close();
+            };
+            pnlTitle.Controls.Add(btnCloseWin);
+
+            Panel cardWarn = new Panel() {
+                Location = new Point(24, 62),
+                Size = new Size(512, 54),
+                BackColor = Color.FromArgb(19, 22, 34)
+            };
+            cardWarn.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, cardWarn.Width - 1, cardWarn.Height - 1);
+                using (GraphicsPath p = CreateRoundedRect(r, 7)) {
+                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 58), 1f)) g.DrawPath(pen, p);
+                }
+            };
+            Controls.Add(cardWarn);
 
             _lblStatus = new Label() {
-                Text = "Нажмите «Удалить барьер» для полной очистки и восстановления параметров сети.",
-                Location = new Point(25, 95),
-                Size = new Size(500, 36),
-                ForeColor = Color.FromArgb(212, 212, 216)
+                Text = "Нажмите «Удалить барьер» для полной очистки WFP и восстановления сети.",
+                Font = new Font("Segoe UI", 8.5f),
+                ForeColor = Color.FromArgb(226, 232, 240),
+                Location = new Point(14, 16),
+                Size = new Size(484, 22),
+                BackColor = Color.Transparent
             };
-            Controls.Add(_lblStatus);
+            cardWarn.Controls.Add(_lblStatus);
 
-            _pb = new ProgressBar() {
-                Location = new Point(25, 140),
-                Size = new Size(495, 16),
-                Style = ProgressBarStyle.Continuous,
+            _pb = new ModernDarkProgressBar() {
+                Location = new Point(24, 126),
+                Size = new Size(512, 14),
                 Value = 0
             };
             Controls.Add(_pb);
 
             _txtLog = new TextBox() {
-                Location = new Point(25, 170),
-                Size = new Size(495, 155),
+                Location = new Point(24, 150),
+                Size = new Size(512, 210),
                 Multiline = true,
                 ReadOnly = true,
                 ScrollBars = ScrollBars.Vertical,
-                BackColor = Color.FromArgb(12, 13, 16),
-                ForeColor = Color.FromArgb(212, 212, 216),
+                BackColor = Color.FromArgb(11, 14, 20),
+                ForeColor = Color.FromArgb(226, 232, 240),
+                BorderStyle = BorderStyle.FixedSingle,
                 Font = new Font("Consolas", 8.5f)
             };
             Controls.Add(_txtLog);
 
-            _btnUninstall = new Button() {
+            _btnUninstall = new UninstButton() {
                 Text = "Удалить барьер",
-                Location = new Point(25, 345),
-                Size = new Size(240, 38),
-                BackColor = Color.FromArgb(185, 28, 28),
-                ForeColor = Color.White,
-                FlatStyle = FlatStyle.Flat,
+                Location = new Point(336, 378),
+                Size = new Size(200, 42),
+                CornerRadius = 7,
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                Cursor = Cursors.Hand
+                GradientStart = Color.FromArgb(220, 38, 38),
+                GradientEnd = Color.FromArgb(185, 28, 28),
+                HoverStart = Color.FromArgb(239, 68, 68),
+                HoverEnd = Color.FromArgb(220, 38, 38),
+                BorderColor = Color.Transparent,
+                ForeColor = Color.White
             };
-            _btnUninstall.FlatAppearance.BorderSize = 0;
             _btnUninstall.Click += (s, e) => StartUninstall();
             Controls.Add(_btnUninstall);
 
-            _btnClose = new Button() {
+            _btnClose = new UninstButton() {
                 Text = "Отмена",
-                Location = new Point(280, 345),
-                Size = new Size(240, 38),
-                BackColor = Color.FromArgb(38, 40, 48),
-                ForeColor = Color.White,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 9.5f),
-                Cursor = Cursors.Hand
+                Location = new Point(212, 378),
+                Size = new Size(114, 42),
+                CornerRadius = 7,
+                Font = new Font("Segoe UI", 9f),
+                GradientStart = Color.FromArgb(24, 28, 40),
+                GradientEnd = Color.FromArgb(18, 21, 32),
+                HoverStart = Color.FromArgb(36, 42, 60),
+                HoverEnd = Color.FromArgb(26, 30, 44),
+                BorderColor = Color.FromArgb(42, 50, 72),
+                ForeColor = Color.FromArgb(148, 163, 184)
             };
-            _btnClose.FlatAppearance.BorderColor = Color.FromArgb(63, 63, 70);
             _btnClose.Click += (s, e) => Close();
             Controls.Add(_btnClose);
         }
@@ -134,6 +374,14 @@ namespace ProjectXO {
             _txtLog.AppendText("[" + DateTime.Now.ToString("HH:mm:ss") + "] " + msg + Environment.NewLine);
         }
 
+        private void SetProgress(int val) {
+            if (InvokeRequired) {
+                BeginInvoke(new Action(() => SetProgress(val)));
+                return;
+            }
+            _pb.Value = val;
+        }
+
         private void StartUninstall() {
             DialogResult dr = MessageBox.Show(
                 "Вы действительно хотите удалить Claude Anti-Ban Barrier и восстановить сетевые параметры Windows?",
@@ -143,17 +391,21 @@ namespace ProjectXO {
 
             if (dr != DialogResult.Yes) return;
 
+            _isUninstalling = true;
             _btnUninstall.Enabled = false;
             _btnClose.Enabled = false;
-            _lblStatus.Text = "Выполняется очистка конфигурации...";
+            _lblStatus.Text = "Выполняется очистка конфигурации и откат параметров сети...";
+            _lblStatus.ForeColor = Color.FromArgb(251, 191, 36);
 
             System.Threading.ThreadPool.QueueUserWorkItem((st) => {
                 try {
                     Log("Завершение активных процессов барьера...");
                     SetProgress(15);
                     try {
-                        foreach (Process p in Process.GetProcessesByName("ProjectXO")) {
-                            try { p.Kill(); p.WaitForExit(1000); } catch {}
+                        foreach (string name in new string[] { "ClaudeBarrier", "ProjectXO" }) {
+                            foreach (Process p in Process.GetProcessesByName(name)) {
+                                try { p.Kill(); p.WaitForExit(1000); } catch {}
+                            }
                         }
                     } catch {}
 
@@ -196,34 +448,37 @@ namespace ProjectXO {
                         Log("Привязка протокола IPv6 на сетевых адаптерах включена.");
                     } catch {}
 
-                    Log("Удаление из автозагрузки...");
+                    Log("Удаление из автозагрузки Windows...");
                     SetProgress(75);
                     try {
                         using (RegistryKey rk = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true)) {
-                            if (rk != null && rk.GetValue("ClaudeAntiBanBarrier") != null) {
-                                rk.DeleteValue("ClaudeAntiBanBarrier");
-                                Log("Запись автозагрузки удалена.");
+                            if (rk != null) {
+                                if (rk.GetValue("ClaudeAntiBanBarrier") != null) rk.DeleteValue("ClaudeAntiBanBarrier");
+                                if (rk.GetValue("ProjectXO") != null) rk.DeleteValue("ProjectXO");
+                                Log("Записи автозагрузки удалены.");
                             }
                         }
                     } catch {}
 
-                    Log("Удаление ярлыков рабочего стола...");
+                    Log("Удаление ярлыков системы...");
                     SetProgress(90);
                     string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                    string startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Project XO");
-
-                    string lnkDesktop = Path.Combine(desktop, "Project XO.lnk");
-                    if (File.Exists(lnkDesktop)) {
-                        try { File.Delete(lnkDesktop); Log("Ярлык на Рабочем столе удален."); } catch {}
+                    foreach (string lnk in new string[] { "Claude Anti-Ban Barrier.lnk", "Project XO.lnk" }) {
+                        string p = Path.Combine(desktop, lnk);
+                        if (File.Exists(p)) { try { File.Delete(p); Log("Ярлык на Рабочем столе удален: " + lnk); } catch {} }
                     }
 
-                    if (Directory.Exists(startMenu)) {
-                        try { Directory.Delete(startMenu, true); Log("Папка меню Пуск удалена."); } catch {}
+                    string commonPrograms = Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms);
+                    foreach (string sm in new string[] { "Claude Anti-Ban Barrier", "Project XO" }) {
+                        string sp = Path.Combine(commonPrograms, sm);
+                        if (Directory.Exists(sp)) { try { Directory.Delete(sp, true); Log("Папка меню Пуск удалена: " + sm); } catch {} }
                     }
 
                     try {
-                        Registry.CurrentUser.DeleteSubKeyTree(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\ProjectXO", false);
+                        Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeBarrier", false);
                         Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ProjectXO", false);
+                        Registry.CurrentUser.DeleteSubKeyTree(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeBarrier", false);
+                        Registry.CurrentUser.DeleteSubKeyTree(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\ProjectXO", false);
                     } catch {}
 
                     SetProgress(100);
@@ -232,8 +487,8 @@ namespace ProjectXO {
                     Log("==================================================");
 
                     Invoke(new Action(() => {
-                        _lblStatus.Text = "Удаление завершено. Сетевые параметры восстановлены.";
-                        _lblStatus.ForeColor = Color.FromArgb(204, 120, 92);
+                        _lblStatus.Text = "Барьер удален. Все сетевые параметры восстановлены.";
+                        _lblStatus.ForeColor = Color.FromArgb(52, 211, 153);
                         _btnClose.Text = "Закрыть";
                         _btnClose.Enabled = true;
                         MessageBox.Show("Барьер успешно удален. Все настройки сети возвращены в исходное состояние.",
@@ -248,14 +503,6 @@ namespace ProjectXO {
                     }));
                 }
             });
-        }
-
-        private void SetProgress(int val) {
-            if (InvokeRequired) {
-                BeginInvoke(new Action(() => SetProgress(val)));
-                return;
-            }
-            _pb.Value = Math.Min(100, Math.Max(0, val));
         }
     }
 }

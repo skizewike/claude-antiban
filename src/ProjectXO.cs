@@ -1080,6 +1080,9 @@ namespace ProjectXO {
         private CloudflareButton _btnChipErr;
         private CloudflareButton _btnChipNet;
         private CloudflareButton _btnChipWfp;
+        private Label _lblUpdateStatus;
+        private CloudflareButton _btnCheckUpdate;
+        private string _latestReleaseUrl = "https://github.com/skizewike/claude-antiban/releases/latest";
 
         // Поля оверлея активации
         private Panel _pnlActivationOverlay;
@@ -1325,11 +1328,11 @@ namespace ProjectXO {
 
         private void SetChipStyle(CloudflareButton btn, bool active) {
             if (btn == null) return;
-            btn.GradientStart = active ? Color.FromArgb(37, 99, 235) : Color.FromArgb(24, 27, 38);
-            btn.GradientEnd = active ? Color.FromArgb(29, 78, 216) : Color.FromArgb(17, 20, 28);
-            btn.HoverStart = active ? Color.FromArgb(59, 130, 246) : Color.FromArgb(36, 42, 58);
-            btn.HoverEnd = active ? Color.FromArgb(37, 99, 235) : Color.FromArgb(26, 30, 42);
-            btn.BorderStrokeColor = active ? Color.FromArgb(96, 165, 250) : Color.FromArgb(42, 50, 70);
+            btn.GradientStart = active ? Color.FromArgb(37, 99, 235) : Color.Transparent;
+            btn.GradientEnd = active ? Color.FromArgb(29, 78, 216) : Color.Transparent;
+            btn.HoverStart = active ? Color.FromArgb(59, 130, 246) : Color.FromArgb(28, 34, 50);
+            btn.HoverEnd = active ? Color.FromArgb(37, 99, 235) : Color.FromArgb(28, 34, 50);
+            btn.BorderStrokeColor = Color.Transparent;
             btn.ForeColor = active ? Color.White : Color.FromArgb(148, 163, 184);
             btn.Invalidate();
         }
@@ -2053,7 +2056,7 @@ namespace ProjectXO {
 
             // Нижний футер 1 в 1 как в Cloudflare One Client
             Label lblCopy = new Label() {
-                Text = "v6.0.0 | ClaudeBarrier Security Core",
+                Text = "v6.0.1 | ClaudeBarrier Security Core",
                 Font = new Font("Segoe UI", 8.2f),
                 ForeColor = Color.FromArgb(80, 95, 120),
                 Location = new Point(0, 642),
@@ -2989,33 +2992,48 @@ namespace ProjectXO {
             };
             page.Controls.Add(lblSub);
 
-            // Тулбар-чипы: фильтры слева с достаточными отступами + удобные кнопки действий справа
+            // Тулбар: Единый капсульный сегментированный переключатель фильтров слева + структурированные кнопки справа
             Panel pnlToolbar = new Panel() {
-                Location = new Point(32, 80),
-                Size = new Size(786, 32),
+                Location = new Point(32, 78),
+                Size = new Size(786, 34),
                 BackColor = Color.Transparent
             };
             page.Controls.Add(pnlToolbar);
 
-            // Левые чипы-фильтры с достаточной шириной
-            _btnChipAll = CreateChipButton("Все", 66, 32, _activeLogFilter == "ALL", (s, e) => ApplyLogFilter("ALL"));
-            _btnChipAll.Location = new Point(0, 0);
-            pnlToolbar.Controls.Add(_btnChipAll);
+            // 1. Единая капсула сегментированного контроля фильтров
+            Panel pnlFilterSegment = new Panel() {
+                Location = new Point(0, 0),
+                Size = new Size(318, 34),
+                BackColor = Color.FromArgb(19, 22, 34)
+            };
+            pnlFilterSegment.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, pnlFilterSegment.Width - 1, pnlFilterSegment.Height - 1);
+                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 7)) {
+                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 58), 1f)) g.DrawPath(pen, p);
+                }
+            };
+            pnlToolbar.Controls.Add(pnlFilterSegment);
 
-            _btnChipErr = CreateChipButton("Ошибки", 86, 32, _activeLogFilter == "ERR", (s, e) => ApplyLogFilter("ERR"));
-            _btnChipErr.Location = new Point(74, 0);
-            pnlToolbar.Controls.Add(_btnChipErr);
+            _btnChipAll = CreateSegmentButton("Все", 66, 28, _activeLogFilter == "ALL", (s, e) => ApplyLogFilter("ALL"));
+            _btnChipAll.Location = new Point(3, 3);
+            pnlFilterSegment.Controls.Add(_btnChipAll);
 
-            _btnChipNet = CreateChipButton("Сеть", 74, 32, _activeLogFilter == "NET", (s, e) => ApplyLogFilter("NET"));
-            _btnChipNet.Location = new Point(168, 0);
-            pnlToolbar.Controls.Add(_btnChipNet);
+            _btnChipErr = CreateSegmentButton("Ошибки", 82, 28, _activeLogFilter == "ERR", (s, e) => ApplyLogFilter("ERR"));
+            _btnChipErr.Location = new Point(71, 3);
+            pnlFilterSegment.Controls.Add(_btnChipErr);
 
-            _btnChipWfp = CreateChipButton("WFP", 72, 32, _activeLogFilter == "WFP", (s, e) => ApplyLogFilter("WFP"));
-            _btnChipWfp.Location = new Point(250, 0);
-            pnlToolbar.Controls.Add(_btnChipWfp);
+            _btnChipNet = CreateSegmentButton("Сеть", 76, 28, _activeLogFilter == "NET", (s, e) => ApplyLogFilter("NET"));
+            _btnChipNet.Location = new Point(155, 3);
+            pnlFilterSegment.Controls.Add(_btnChipNet);
 
-            // Правые кнопки действий с широкими полями и 10px расстоянием
-            CloudflareButton btnClear = CreateChipButton("Очистить", 96, 32, false, (s, e) => {
+            _btnChipWfp = CreateSegmentButton("WFP", 78, 28, _activeLogFilter == "WFP", (s, e) => ApplyLogFilter("WFP"));
+            _btnChipWfp.Location = new Point(233, 3);
+            pnlFilterSegment.Controls.Add(_btnChipWfp);
+
+            // 2. Правые кнопки действий
+            CloudflareButton btnClear = CreateActionToolbarButton("Очистить", 98, 34, (s, e) => {
                 lock (_logLock) {
                     _allLogs.Clear();
                 }
@@ -3023,30 +3041,30 @@ namespace ProjectXO {
                 _logEventCount = 0;
                 if (_lblLogCount != null) _lblLogCount.Text = "Событий: 0";
             });
-            btnClear.Location = new Point(462, 0);
+            btnClear.Location = new Point(446, 0);
             pnlToolbar.Controls.Add(btnClear);
 
-            CloudflareButton btnExport = CreateChipButton("Экспорт", 94, 32, false, (s, e) => ExportLogsToFile());
-            btnExport.Location = new Point(568, 0);
-            pnlToolbar.Controls.Add(btnExport);
-
-            CloudflareButton btnCopy = CreateChipButton("Копировать", 114, 32, false, (s, e) => CopyLogsToClipboard());
-            btnCopy.Location = new Point(672, 0);
+            CloudflareButton btnCopy = CreateActionToolbarButton("Копировать", 118, 34, (s, e) => CopyLogsToClipboard());
+            btnCopy.Location = new Point(552, 0);
             pnlToolbar.Controls.Add(btnCopy);
 
-            // Карточка терминала консоли ядра (высота 526px, отступ от тулбара 12px)
+            CloudflareButton btnExport = CreateActionToolbarButton("Экспорт", 108, 34, (s, e) => ExportLogsToFile());
+            btnExport.Location = new Point(678, 0);
+            pnlToolbar.Controls.Add(btnExport);
+
+            // Карточка терминала консоли ядра (высота 458px)
             Panel cardLogs = new Panel() {
-                Location = new Point(32, 124),
-                Size = new Size(786, 526),
-                BackColor = Color.FromArgb(19, 22, 32)
+                Location = new Point(32, 120),
+                Size = new Size(786, 458),
+                BackColor = Color.FromArgb(19, 22, 34)
             };
             cardLogs.Paint += (s, pe) => {
                 Graphics g = pe.Graphics;
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 Rectangle r = new Rectangle(0, 0, cardLogs.Width - 1, cardLogs.Height - 1);
                 using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
-                    using (SolidBrush b = new SolidBrush(Color.FromArgb(19, 22, 32))) g.FillPath(b, p);
-                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 56), 1f)) g.DrawPath(pen, p);
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(19, 22, 34))) g.FillPath(b, p);
+                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 58), 1f)) g.DrawPath(pen, p);
                 }
                 using (Pen divPen = new Pen(Color.FromArgb(28, 33, 48), 1f)) {
                     g.DrawLine(divPen, 16, 36, cardLogs.Width - 16, 36);
@@ -3081,7 +3099,7 @@ namespace ProjectXO {
 
             _rtbLogs = new RichTextBox() {
                 Location = new Point(14, 42),
-                Size = new Size(758, 472),
+                Size = new Size(758, 404),
                 BackColor = Color.FromArgb(11, 14, 20),
                 ForeColor = Color.FromArgb(226, 232, 240),
                 Font = new Font("Consolas", 9f),
@@ -3090,24 +3108,199 @@ namespace ProjectXO {
                 ScrollBars = RichTextBoxScrollBars.Vertical
             };
             cardLogs.Controls.Add(_rtbLogs);
+
+            // Блок синхронизации релизов и обновлений GitHub под консолью (высота 58px)
+            Panel cardUpdate = new Panel() {
+                Location = new Point(32, 588),
+                Size = new Size(786, 58),
+                BackColor = Color.FromArgb(19, 22, 34)
+            };
+            cardUpdate.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, cardUpdate.Width - 1, cardUpdate.Height - 1);
+                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(19, 22, 34))) g.FillPath(b, p);
+                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 58), 1f)) g.DrawPath(pen, p);
+                }
+                using (SolidBrush iconBg = new SolidBrush(Color.FromArgb(28, 34, 52))) {
+                    g.FillEllipse(iconBg, 14, 13, 32, 32);
+                }
+                using (Pen iconPen = new Pen(Color.FromArgb(56, 189, 248), 1.8f)) {
+                    g.DrawArc(iconPen, 20, 19, 20, 20, 45, 270);
+                    g.DrawLine(iconPen, 34, 18, 37, 21);
+                    g.DrawLine(iconPen, 34, 24, 37, 21);
+                }
+            };
+            page.Controls.Add(cardUpdate);
+
+            Label lblUpdTitle = new Label() {
+                Text = "Сборка ClaudeBarrier v6.0.1 • Канал релизов GitHub",
+                Font = new Font("Segoe UI", 9.2f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(56, 10),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardUpdate.Controls.Add(lblUpdTitle);
+
+            _lblUpdateStatus = new Label() {
+                Text = "Статус: Нажмите кнопку справа для онлайн-проверки обновлений на GitHub",
+                Font = new Font("Segoe UI", 8.2f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(57, 31),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardUpdate.Controls.Add(_lblUpdateStatus);
+
+            _btnCheckUpdate = new CloudflareButton() {
+                Text = "Проверить обновления",
+                Location = new Point(584, 11),
+                Size = new Size(190, 36),
+                CornerRadius = 7,
+                Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
+                GradientStart = Color.FromArgb(28, 33, 48),
+                GradientEnd = Color.FromArgb(20, 24, 36),
+                HoverStart = Color.FromArgb(42, 50, 72),
+                HoverEnd = Color.FromArgb(32, 38, 56),
+                BorderStrokeColor = Color.FromArgb(46, 56, 82),
+                ForeColor = Color.FromArgb(241, 245, 249),
+                Cursor = Cursors.Hand
+            };
+            _btnCheckUpdate.Click += (s, e) => {
+                if (_btnCheckUpdate.Text.StartsWith("Скачать", StringComparison.OrdinalIgnoreCase)) {
+                    try { Process.Start(_latestReleaseUrl); } catch {}
+                } else {
+                    CheckForUpdatesAsync();
+                }
+            };
+            cardUpdate.Controls.Add(_btnCheckUpdate);
         }
 
-        private CloudflareButton CreateChipButton(string text, int width, int height, bool isActive, EventHandler onClick) {
+        private CloudflareButton CreateSegmentButton(string text, int width, int height, bool isActive, EventHandler onClick) {
             CloudflareButton btn = new CloudflareButton() {
                 Text = text,
                 Size = new Size(width, height),
-                CornerRadius = 6,
+                CornerRadius = 5,
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                GradientStart = isActive ? Color.FromArgb(37, 99, 235) : Color.FromArgb(24, 27, 38),
-                GradientEnd = isActive ? Color.FromArgb(29, 78, 216) : Color.FromArgb(17, 20, 28),
-                HoverStart = isActive ? Color.FromArgb(59, 130, 246) : Color.FromArgb(36, 42, 58),
-                HoverEnd = isActive ? Color.FromArgb(37, 99, 235) : Color.FromArgb(26, 30, 42),
-                BorderStrokeColor = isActive ? Color.FromArgb(96, 165, 250) : Color.FromArgb(42, 50, 70),
+                GradientStart = isActive ? Color.FromArgb(37, 99, 235) : Color.Transparent,
+                GradientEnd = isActive ? Color.FromArgb(29, 78, 216) : Color.Transparent,
+                HoverStart = isActive ? Color.FromArgb(59, 130, 246) : Color.FromArgb(28, 34, 50),
+                HoverEnd = isActive ? Color.FromArgb(37, 99, 235) : Color.FromArgb(28, 34, 50),
+                BorderStrokeColor = Color.Transparent,
                 ForeColor = isActive ? Color.White : Color.FromArgb(148, 163, 184),
                 Cursor = Cursors.Hand
             };
             if (onClick != null) btn.Click += onClick;
             return btn;
+        }
+
+        private CloudflareButton CreateActionToolbarButton(string text, int width, int height, EventHandler onClick) {
+            CloudflareButton btn = new CloudflareButton() {
+                Text = text,
+                Size = new Size(width, height),
+                CornerRadius = 7,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                GradientStart = Color.FromArgb(22, 26, 38),
+                GradientEnd = Color.FromArgb(17, 20, 30),
+                HoverStart = Color.FromArgb(34, 40, 58),
+                HoverEnd = Color.FromArgb(26, 31, 46),
+                BorderStrokeColor = Color.FromArgb(42, 50, 72),
+                ForeColor = Color.FromArgb(226, 232, 240),
+                Cursor = Cursors.Hand
+            };
+            if (onClick != null) btn.Click += onClick;
+            return btn;
+        }
+
+        private void CheckForUpdatesAsync() {
+            if (_btnCheckUpdate == null) return;
+            _btnCheckUpdate.Enabled = false;
+            _btnCheckUpdate.Text = "Проверка...";
+            if (_lblUpdateStatus != null) {
+                _lblUpdateStatus.Text = "Связь с GitHub Releases...";
+                _lblUpdateStatus.ForeColor = Color.FromArgb(148, 163, 184);
+            }
+
+            ThreadPool.QueueUserWorkItem((st) => {
+                try {
+                    ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; // Tls12
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create("https://github.com/skizewike/claude-antiban/releases/latest");
+                    req.Method = "HEAD";
+                    req.UserAgent = "ClaudeBarrier-Client/6.0.1";
+                    req.Timeout = 6000;
+                    req.AllowAutoRedirect = false;
+
+                    string latestTag = "v6.0.1";
+                    string loc = "";
+                    using (HttpWebResponse res = (HttpWebResponse)req.GetResponse()) {
+                        loc = res.GetResponseHeader("Location");
+                        if (!string.IsNullOrEmpty(loc)) {
+                            int lastSlash = loc.LastIndexOf('/');
+                            if (lastSlash >= 0 && lastSlash < loc.Length - 1) {
+                                latestTag = loc.Substring(lastSlash + 1).Trim();
+                            }
+                        }
+                    }
+
+                    SafeInvoke(() => {
+                        _latestReleaseUrl = string.IsNullOrEmpty(loc) ? "https://github.com/skizewike/claude-antiban/releases/latest" : loc;
+                        string curVer = "v6.0.1";
+                        bool isNewer = CompareVersions(latestTag, curVer) > 0;
+
+                        if (isNewer) {
+                            if (_lblUpdateStatus != null) {
+                                _lblUpdateStatus.Text = "🚀 Доступно обновление " + latestTag + " на GitHub! Нажмите кнопку для загрузки.";
+                                _lblUpdateStatus.ForeColor = Color.FromArgb(251, 191, 36);
+                            }
+                            if (_btnCheckUpdate != null) {
+                                _btnCheckUpdate.Text = "Скачать " + latestTag;
+                                _btnCheckUpdate.GradientStart = Color.FromArgb(37, 99, 235);
+                                _btnCheckUpdate.GradientEnd = Color.FromArgb(29, 78, 216);
+                                _btnCheckUpdate.HoverStart = Color.FromArgb(59, 130, 246);
+                                _btnCheckUpdate.ForeColor = Color.White;
+                                _btnCheckUpdate.Enabled = true;
+                            }
+                        } else {
+                            if (_lblUpdateStatus != null) {
+                                _lblUpdateStatus.Text = "✓ Установлена актуальная версия (" + curVer + "). Обновлений не требуется.";
+                                _lblUpdateStatus.ForeColor = Color.FromArgb(52, 211, 153);
+                            }
+                            if (_btnCheckUpdate != null) {
+                                _btnCheckUpdate.Text = "Актуально ✓";
+                                _btnCheckUpdate.GradientStart = Color.FromArgb(20, 24, 36);
+                                _btnCheckUpdate.GradientEnd = Color.FromArgb(16, 19, 30);
+                                _btnCheckUpdate.ForeColor = Color.FromArgb(148, 163, 184);
+                                _btnCheckUpdate.Enabled = true;
+                            }
+                        }
+                    });
+                } catch (Exception ex) {
+                    SafeInvoke(() => {
+                        if (_lblUpdateStatus != null) {
+                            _lblUpdateStatus.Text = "Ошибка связи с GitHub: " + ex.Message;
+                            _lblUpdateStatus.ForeColor = Color.FromArgb(248, 113, 113);
+                        }
+                        if (_btnCheckUpdate != null) {
+                            _btnCheckUpdate.Text = "Повторить";
+                            _btnCheckUpdate.Enabled = true;
+                        }
+                    });
+                }
+            });
+        }
+
+        private int CompareVersions(string vA, string vB) {
+            try {
+                string cleanA = (vA ?? "").TrimStart('v', 'V').Trim();
+                string cleanB = (vB ?? "").TrimStart('v', 'V').Trim();
+                Version verA = new Version(cleanA);
+                Version verB = new Version(cleanB);
+                return verA.CompareTo(verB);
+            } catch {
+                return string.Compare(vA, vB, StringComparison.OrdinalIgnoreCase);
+            }
         }
 
         // Обновление состояния приложения (Warning vs Safe)

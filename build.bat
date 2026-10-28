@@ -37,7 +37,7 @@ echo [+] ClaudeBarrier.exe built successfully.
 
 echo.
 echo [*] [3/5] Compiling ClaudeBarrier-Setup-x64.exe (Standalone Installer)...
-"%CSC%" /target:winexe /optimize+ /win32icon:"app_icon.ico" /resource:dist\ProjectXO.exe,ProjectXO.exe /resource:dist\Uninstall_Project_XO.exe,Uninstall_Project_XO.exe /resource:app_icon.ico,app_icon.ico /out:"dist\Setup_Project_XO.exe" "src\Setup_Project_XO.cs"
+"%CSC%" /target:winexe /optimize+ /win32icon:"app_icon.ico" /resource:dist\ProjectXO.exe,ProjectXO.exe /resource:dist\Uninstall_Project_XO.exe,Uninstall_Project_XO.exe /resource:app_icon.ico,app_icon.ico /resource:app_icon.png,app_icon.png /out:"dist\Setup_Project_XO.exe" "src\Setup_Project_XO.cs"
 if %errorlevel% neq 0 (
     echo [!] Failed to compile Setup_Project_XO.exe
     exit /b %errorlevel%
