@@ -116,8 +116,23 @@ namespace ProjectXO.Uninstaller {
         protected override void OnPaint(PaintEventArgs pevent) {
             Graphics g = pevent.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
+            Color parentBg = Color.FromArgb(13, 15, 21);
+            Control parent = Parent;
+            while (parent != null) {
+                if (parent.BackColor != Color.Transparent && parent.BackColor.A == 255) {
+                    parentBg = parent.BackColor;
+                    break;
+                }
+                parent = parent.Parent;
+            }
+            using (SolidBrush pb = new SolidBrush(parentBg)) {
+                g.FillRectangle(pb, ClientRectangle);
+            }
+
+            Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
             Color c1 = _isPressed ? GradientEnd : (_isHovered ? HoverStart : GradientStart);
             Color c2 = _isPressed ? GradientStart : (_isHovered ? HoverEnd : GradientEnd);
 
@@ -128,11 +143,15 @@ namespace ProjectXO.Uninstaller {
                     }
                 }
                 if (BorderColor != Color.Transparent) {
-                    using (Pen pen = new Pen(BorderColor, 1f)) g.DrawPath(pen, p);
+                    using (Pen pen = new Pen(BorderColor, 1f)) {
+                        pen.Alignment = PenAlignment.Inset;
+                        g.DrawPath(pen, p);
+                    }
                 }
             }
 
-            TextRenderer.DrawText(g, Text, Font, r, ForeColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            Color textColor = _isHovered ? Color.White : ForeColor;
+            TextRenderer.DrawText(g, Text, Font, r, textColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         }
     }
 

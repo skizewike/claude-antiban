@@ -126,8 +126,23 @@ namespace ProjectXO.Installer {
         protected override void OnPaint(PaintEventArgs pevent) {
             Graphics g = pevent.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
+            Color parentBg = Color.FromArgb(13, 15, 21);
+            Control parent = Parent;
+            while (parent != null) {
+                if (parent.BackColor != Color.Transparent && parent.BackColor.A == 255) {
+                    parentBg = parent.BackColor;
+                    break;
+                }
+                parent = parent.Parent;
+            }
+            using (SolidBrush pb = new SolidBrush(parentBg)) {
+                g.FillRectangle(pb, ClientRectangle);
+            }
+
+            Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
             Color c1 = _isPressed ? GradientEnd : (_isHovered ? HoverStart : GradientStart);
             Color c2 = _isPressed ? GradientStart : (_isHovered ? HoverEnd : GradientEnd);
 
@@ -138,11 +153,15 @@ namespace ProjectXO.Installer {
                     }
                 }
                 if (BorderColor != Color.Transparent) {
-                    using (Pen pen = new Pen(BorderColor, 1f)) g.DrawPath(pen, p);
+                    using (Pen pen = new Pen(BorderColor, 1f)) {
+                        pen.Alignment = PenAlignment.Inset;
+                        g.DrawPath(pen, p);
+                    }
                 }
             }
 
-            TextRenderer.DrawText(g, Text, Font, r, ForeColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            Color textColor = _isHovered ? Color.White : ForeColor;
+            TextRenderer.DrawText(g, Text, Font, r, textColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         }
     }
 
@@ -463,13 +482,13 @@ namespace ProjectXO.Installer {
                 Location = new Point(252, 386),
                 Size = new Size(114, 42),
                 CornerRadius = 7,
-                Font = new Font("Segoe UI", 9f),
-                GradientStart = Color.FromArgb(24, 28, 40),
-                GradientEnd = Color.FromArgb(18, 21, 32),
-                HoverStart = Color.FromArgb(36, 42, 60),
-                HoverEnd = Color.FromArgb(26, 30, 44),
-                BorderColor = Color.FromArgb(42, 50, 72),
-                ForeColor = Color.FromArgb(148, 163, 184)
+                Font = new Font("Segoe UI", 9.2f, FontStyle.Bold),
+                GradientStart = Color.FromArgb(22, 26, 38),
+                GradientEnd = Color.FromArgb(16, 19, 28),
+                HoverStart = Color.FromArgb(34, 40, 58),
+                HoverEnd = Color.FromArgb(24, 28, 42),
+                BorderColor = Color.FromArgb(44, 54, 78),
+                ForeColor = Color.FromArgb(226, 232, 240)
             };
             _btnCancel.Click += (s, e) => Close();
             Controls.Add(_btnCancel);

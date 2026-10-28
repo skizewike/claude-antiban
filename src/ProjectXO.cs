@@ -499,7 +499,15 @@ namespace ProjectXO {
             g.PixelOffsetMode = PixelOffsetMode.HighQuality;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
-            Color parentBg = (Parent != null) ? Parent.BackColor : Color.FromArgb(17, 19, 27);
+            Color parentBg = Color.FromArgb(13, 15, 21);
+            Control parent = Parent;
+            while (parent != null) {
+                if (parent.BackColor != Color.Transparent && parent.BackColor.A == 255) {
+                    parentBg = parent.BackColor;
+                    break;
+                }
+                parent = parent.Parent;
+            }
             using (SolidBrush pb = new SolidBrush(parentBg)) {
                 g.FillRectangle(pb, ClientRectangle);
             }
@@ -508,6 +516,7 @@ namespace ProjectXO {
             using (GraphicsPath path = GraphicsUtils.CreateRoundedRectangle(bounds, CornerRadius)) {
                 if (HasGlow && Enabled) {
                     using (Pen glowPen = new Pen(GlowColor, 4f)) {
+                        glowPen.Alignment = PenAlignment.Inset;
                         g.DrawPath(glowPen, path);
                     }
                 }
@@ -527,14 +536,9 @@ namespace ProjectXO {
                     g.FillPath(lgb, path);
                 }
 
-                if (Enabled) {
-                    using (Pen topPen = new Pen(Color.FromArgb(45, 255, 255, 255), 1f)) {
-                        g.DrawLine(topPen, bounds.Left + CornerRadius, bounds.Top, bounds.Right - CornerRadius, bounds.Top);
-                    }
-                }
-
                 if (BorderStrokeColor != Color.Transparent && Enabled) {
                     using (Pen p = new Pen(BorderStrokeColor, 1f)) {
+                        p.Alignment = PenAlignment.Inset;
                         g.DrawPath(p, path);
                     }
                 }
@@ -547,6 +551,132 @@ namespace ProjectXO {
     }
 
     // Переключатель в стиле Cloudflare One (WARP iOS-style toggle switch)
+    // Монолитный сегментированный переключатель фильтров журнала в стиле WARP/macOS
+    public class WarpSegmentedFilterControl : Control {
+        private string[] _items = new string[] { "Все", "Ошибки", "Сеть", "WFP" };
+        private int _selectedIndex = 0;
+        private int _hoverIndex = -1;
+        public event EventHandler SelectedIndexChanged;
+
+        public int SelectedIndex {
+            get { return _selectedIndex; }
+            set {
+                if (value >= 0 && value < _items.Length && _selectedIndex != value) {
+                    _selectedIndex = value;
+                    Invalidate();
+                    if (SelectedIndexChanged != null) SelectedIndexChanged(this, EventArgs.Empty);
+                }
+            }
+        }
+
+        public string SelectedFilter {
+            get {
+                switch (_selectedIndex) {
+                    case 1: return "ERR";
+                    case 2: return "NET";
+                    case 3: return "WFP";
+                    default: return "ALL";
+                }
+            }
+        }
+
+        public WarpSegmentedFilterControl() {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            Size = new Size(320, 34);
+            Font = new Font("Segoe UI", 8.8f, FontStyle.Bold);
+            Cursor = Cursors.Hand;
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e) {
+            int newHover = GetIndexAt(e.X);
+            if (newHover != _hoverIndex) {
+                _hoverIndex = newHover;
+                Invalidate();
+            }
+            base.OnMouseMove(e);
+        }
+
+        protected override void OnMouseLeave(EventArgs e) {
+            _hoverIndex = -1;
+            Invalidate();
+            base.OnMouseLeave(e);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e) {
+            if (e.Button == MouseButtons.Left) {
+                int clicked = GetIndexAt(e.X);
+                if (clicked >= 0 && clicked < _items.Length) {
+                    SelectedIndex = clicked;
+                }
+            }
+            base.OnMouseDown(e);
+        }
+
+        private int GetIndexAt(int x) {
+            if (x < 3 || x >= Width - 3) return -1;
+            int tabW = (Width - 6) / _items.Length;
+            int idx = (x - 3) / tabW;
+            return Math.Max(0, Math.Min(_items.Length - 1, idx));
+        }
+
+        protected override void OnPaint(PaintEventArgs e) {
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+            Color parentBg = Color.FromArgb(13, 15, 21);
+            Control parent = Parent;
+            while (parent != null) {
+                if (parent.BackColor != Color.Transparent && parent.BackColor.A == 255) {
+                    parentBg = parent.BackColor;
+                    break;
+                }
+                parent = parent.Parent;
+            }
+            using (SolidBrush pb = new SolidBrush(parentBg)) {
+                g.FillRectangle(pb, ClientRectangle);
+            }
+
+            Rectangle bounds = new Rectangle(0, 0, Width - 1, Height - 1);
+            using (GraphicsPath path = GraphicsUtils.CreateRoundedRectangle(bounds, 7)) {
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(19, 23, 34))) {
+                    g.FillPath(b, path);
+                }
+                using (Pen pen = new Pen(Color.FromArgb(34, 40, 58), 1f)) {
+                    pen.Alignment = PenAlignment.Inset;
+                    g.DrawPath(pen, path);
+                }
+            }
+
+            int tabW = (Width - 6) / _items.Length;
+
+            for (int i = 0; i < _items.Length; i++) {
+                Rectangle tabRect = new Rectangle(3 + i * tabW, 3, tabW, Height - 6);
+                bool isSelected = (i == _selectedIndex);
+                bool isHovered = (i == _hoverIndex && !isSelected);
+
+                if (isSelected) {
+                    using (GraphicsPath tp = GraphicsUtils.CreateRoundedRectangle(tabRect, 5)) {
+                        using (LinearGradientBrush lgb = new LinearGradientBrush(tabRect, Color.FromArgb(37, 99, 235), Color.FromArgb(29, 78, 216), 90f)) {
+                            g.FillPath(lgb, tp);
+                        }
+                    }
+                } else if (isHovered) {
+                    using (GraphicsPath tp = GraphicsUtils.CreateRoundedRectangle(tabRect, 5)) {
+                        using (SolidBrush hb = new SolidBrush(Color.FromArgb(28, 34, 50))) {
+                            g.FillPath(hb, tp);
+                        }
+                    }
+                }
+
+                Color textCol = isSelected ? Color.White : (isHovered ? Color.FromArgb(241, 245, 249) : Color.FromArgb(148, 163, 184));
+                TextRenderer.DrawText(g, _items[i], Font, tabRect, textCol,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+            }
+        }
+    }
+
     public class WarpToggleSwitch : Control {
         private bool _checked = false;
         public event EventHandler CheckedChanged;
@@ -1076,10 +1206,7 @@ namespace ProjectXO {
         }
         private List<LogItem> _allLogs = new List<LogItem>();
         private string _activeLogFilter = "ALL";
-        private CloudflareButton _btnChipAll;
-        private CloudflareButton _btnChipErr;
-        private CloudflareButton _btnChipNet;
-        private CloudflareButton _btnChipWfp;
+        private WarpSegmentedFilterControl _segmentedFilters;
         private Label _lblUpdateStatus;
         private CloudflareButton _btnCheckUpdate;
         private string _latestReleaseUrl = "https://github.com/skizewike/claude-antiban/releases/latest";
@@ -1320,21 +1447,15 @@ namespace ProjectXO {
         }
 
         private void UpdateFilterChipStyles() {
-            SetChipStyle(_btnChipAll, _activeLogFilter == "ALL");
-            SetChipStyle(_btnChipErr, _activeLogFilter == "ERR");
-            SetChipStyle(_btnChipNet, _activeLogFilter == "NET");
-            SetChipStyle(_btnChipWfp, _activeLogFilter == "WFP");
-        }
-
-        private void SetChipStyle(CloudflareButton btn, bool active) {
-            if (btn == null) return;
-            btn.GradientStart = active ? Color.FromArgb(37, 99, 235) : Color.Transparent;
-            btn.GradientEnd = active ? Color.FromArgb(29, 78, 216) : Color.Transparent;
-            btn.HoverStart = active ? Color.FromArgb(59, 130, 246) : Color.FromArgb(28, 34, 50);
-            btn.HoverEnd = active ? Color.FromArgb(37, 99, 235) : Color.FromArgb(28, 34, 50);
-            btn.BorderStrokeColor = Color.Transparent;
-            btn.ForeColor = active ? Color.White : Color.FromArgb(148, 163, 184);
-            btn.Invalidate();
+            if (_segmentedFilters != null) {
+                int target = 0;
+                if (_activeLogFilter == "ERR") target = 1;
+                else if (_activeLogFilter == "NET") target = 2;
+                else if (_activeLogFilter == "WFP") target = 3;
+                if (_segmentedFilters.SelectedIndex != target) {
+                    _segmentedFilters.SelectedIndex = target;
+                }
+            }
         }
 
         private void AutoDetectAppPaths() {
@@ -3000,40 +3121,23 @@ namespace ProjectXO {
             };
             page.Controls.Add(pnlToolbar);
 
-            // 1. Единая капсула сегментированного контроля фильтров
-            Panel pnlFilterSegment = new Panel() {
+            // 1. Монолитный сегментированный контрол фильтров слева
+            _segmentedFilters = new WarpSegmentedFilterControl() {
                 Location = new Point(0, 0),
-                Size = new Size(318, 34),
-                BackColor = Color.FromArgb(19, 22, 34)
+                Size = new Size(320, 34)
             };
-            pnlFilterSegment.Paint += (s, pe) => {
-                Graphics g = pe.Graphics;
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                Rectangle r = new Rectangle(0, 0, pnlFilterSegment.Width - 1, pnlFilterSegment.Height - 1);
-                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 7)) {
-                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 58), 1f)) g.DrawPath(pen, p);
-                }
+            if (_activeLogFilter == "ERR") _segmentedFilters.SelectedIndex = 1;
+            else if (_activeLogFilter == "NET") _segmentedFilters.SelectedIndex = 2;
+            else if (_activeLogFilter == "WFP") _segmentedFilters.SelectedIndex = 3;
+            else _segmentedFilters.SelectedIndex = 0;
+
+            _segmentedFilters.SelectedIndexChanged += (s, e) => {
+                ApplyLogFilter(_segmentedFilters.SelectedFilter);
             };
-            pnlToolbar.Controls.Add(pnlFilterSegment);
-
-            _btnChipAll = CreateSegmentButton("Все", 66, 28, _activeLogFilter == "ALL", (s, e) => ApplyLogFilter("ALL"));
-            _btnChipAll.Location = new Point(3, 3);
-            pnlFilterSegment.Controls.Add(_btnChipAll);
-
-            _btnChipErr = CreateSegmentButton("Ошибки", 82, 28, _activeLogFilter == "ERR", (s, e) => ApplyLogFilter("ERR"));
-            _btnChipErr.Location = new Point(71, 3);
-            pnlFilterSegment.Controls.Add(_btnChipErr);
-
-            _btnChipNet = CreateSegmentButton("Сеть", 76, 28, _activeLogFilter == "NET", (s, e) => ApplyLogFilter("NET"));
-            _btnChipNet.Location = new Point(155, 3);
-            pnlFilterSegment.Controls.Add(_btnChipNet);
-
-            _btnChipWfp = CreateSegmentButton("WFP", 78, 28, _activeLogFilter == "WFP", (s, e) => ApplyLogFilter("WFP"));
-            _btnChipWfp.Location = new Point(233, 3);
-            pnlFilterSegment.Controls.Add(_btnChipWfp);
+            pnlToolbar.Controls.Add(_segmentedFilters);
 
             // 2. Правые кнопки действий
-            CloudflareButton btnClear = CreateActionToolbarButton("Очистить", 98, 34, (s, e) => {
+            CloudflareButton btnClear = CreateActionToolbarButton("Очистить", 96, 34, (s, e) => {
                 lock (_logLock) {
                     _allLogs.Clear();
                 }
@@ -3041,15 +3145,15 @@ namespace ProjectXO {
                 _logEventCount = 0;
                 if (_lblLogCount != null) _lblLogCount.Text = "Событий: 0";
             });
-            btnClear.Location = new Point(446, 0);
+            btnClear.Location = new Point(452, 0);
             pnlToolbar.Controls.Add(btnClear);
 
-            CloudflareButton btnCopy = CreateActionToolbarButton("Копировать", 118, 34, (s, e) => CopyLogsToClipboard());
-            btnCopy.Location = new Point(552, 0);
+            CloudflareButton btnCopy = CreateActionToolbarButton("Копировать", 116, 34, (s, e) => CopyLogsToClipboard());
+            btnCopy.Location = new Point(556, 0);
             pnlToolbar.Controls.Add(btnCopy);
 
-            CloudflareButton btnExport = CreateActionToolbarButton("Экспорт", 108, 34, (s, e) => ExportLogsToFile());
-            btnExport.Location = new Point(678, 0);
+            CloudflareButton btnExport = CreateActionToolbarButton("Экспорт", 104, 34, (s, e) => ExportLogsToFile());
+            btnExport.Location = new Point(680, 0);
             pnlToolbar.Controls.Add(btnExport);
 
             // Карточка терминала консоли ядра (высота 458px)
@@ -3178,23 +3282,7 @@ namespace ProjectXO {
             cardUpdate.Controls.Add(_btnCheckUpdate);
         }
 
-        private CloudflareButton CreateSegmentButton(string text, int width, int height, bool isActive, EventHandler onClick) {
-            CloudflareButton btn = new CloudflareButton() {
-                Text = text,
-                Size = new Size(width, height),
-                CornerRadius = 5,
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                GradientStart = isActive ? Color.FromArgb(37, 99, 235) : Color.Transparent,
-                GradientEnd = isActive ? Color.FromArgb(29, 78, 216) : Color.Transparent,
-                HoverStart = isActive ? Color.FromArgb(59, 130, 246) : Color.FromArgb(28, 34, 50),
-                HoverEnd = isActive ? Color.FromArgb(37, 99, 235) : Color.FromArgb(28, 34, 50),
-                BorderStrokeColor = Color.Transparent,
-                ForeColor = isActive ? Color.White : Color.FromArgb(148, 163, 184),
-                Cursor = Cursors.Hand
-            };
-            if (onClick != null) btn.Click += onClick;
-            return btn;
-        }
+
 
         private CloudflareButton CreateActionToolbarButton(string text, int width, int height, EventHandler onClick) {
             CloudflareButton btn = new CloudflareButton() {
