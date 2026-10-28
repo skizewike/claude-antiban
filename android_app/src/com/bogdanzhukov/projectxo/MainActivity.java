@@ -21,15 +21,18 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
-import java.net.InetSocketAddress;
-import java.net.Socket;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 public class MainActivity extends Activity {
     private WebView webView;
     private Handler handler;
     private Vibrator vibrator;
     private boolean isMonitoring = true;
-    private int consecutiveFails = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -51,46 +54,6 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new XOBinding(), "AndroidXO");
 
         webView.loadUrl("file:///android_asset/index.html");
-
-        startNetworkWatchdog();
-    }
-
-    private void startNetworkWatchdog() {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                while (isMonitoring) {
-                    try {
-                        Thread.sleep(1200);
-                    } catch (InterruptedException ignored) {}
-
-                    final boolean vpnActive = isVpnActive();
-                    boolean probeOk = false;
-
-                    try {
-                        Socket socket = new Socket();
-                        socket.connect(new InetSocketAddress("api.anthropic.com", 443), 1500);
-                        probeOk = socket.isConnected();
-                        socket.close();
-                    } catch (Exception ignored) {}
-
-                    if (vpnActive && probeOk) {
-                        consecutiveFails = 0;
-                    } else {
-                        consecutiveFails++;
-                        if (consecutiveFails >= 2) {
-                            final String reason = !vpnActive ? "VPN отключился или оборвался!" : "Обрыв связи с серверами Claude!";
-                            handler.post(new Runnable() {
-                                @Override
-                                public void run() {
-                                    triggerEmergencyAlarm(reason);
-                                }
-                            });
-                        }
-                    }
-                }
-            }
-        }).start();
     }
 
     private boolean isVpnActive() {
@@ -105,17 +68,6 @@ public class MainActivity extends Activity {
             }
         } catch (Exception ignored) {}
         return false;
-    }
-
-    private void triggerEmergencyAlarm(final String reason) {
-        if (vibrator != null) {
-            try {
-                vibrator.vibrate(500);
-            } catch (Exception ignored) {}
-        }
-        if (webView != null) {
-            webView.evaluateJavascript("if (window.triggerProhibited) { window.triggerProhibited('" + reason + "'); }", null);
-        }
     }
 
     @Override
@@ -155,6 +107,14 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void launchBrowser() {
+            try {
+                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://claude.ai"));
+                startActivity(browserIntent);
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
         public boolean isOverlayPermitted() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 return Settings.canDrawOverlays(MainActivity.this);
@@ -171,9 +131,9 @@ public class MainActivity extends Activity {
                         Uri.parse("package:" + getPackageName())
                     );
                     startActivity(intent);
-                    showToast("Включите разрешение «Поверх других приложений» для Project XO");
+                    showToast("Разрешите показ поверх других приложений для виджета защиты");
                 } else {
-                    showToast("Разрешение «Поверх других приложений» уже предоставлено!");
+                    showToast("Разрешение поверх окон уже предоставлено");
                 }
             }
         }
@@ -184,17 +144,21 @@ public class MainActivity extends Activity {
                 requestOverlayPermission();
                 return;
             }
-            Intent serviceIntent = new Intent(MainActivity.this, FloatingGuardService.class);
-            if (enable) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(serviceIntent);
+            try {
+                Intent serviceIntent = new Intent(MainActivity.this, FloatingGuardService.class);
+                if (enable) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(serviceIntent);
+                    } else {
+                        startService(serviceIntent);
+                    }
+                    showToast("Виджет защиты Claude активен");
                 } else {
-                    startService(serviceIntent);
+                    stopService(serviceIntent);
+                    showToast("Виджет защиты выключен");
                 }
-                showToast("Умный режим защиты (поверх всех окон) ВКЛЮЧЕН");
-            } else {
-                stopService(serviceIntent);
-                showToast("Умный режим защиты ВЫКЛЮЧЕН");
+            } catch (Exception ex) {
+                showToast("Ошибка запуска виджета: " + ex.getMessage());
             }
         }
 
@@ -208,7 +172,7 @@ public class MainActivity extends Activity {
                         intent.setData(Uri.parse("package:" + getPackageName()));
                         startActivity(intent);
                     } else {
-                        showToast("Оптимизация батареи уже отключена для постоянной защиты!");
+                        showToast("Оптимизация батареи уже настроена для постоянной защиты");
                     }
                 } catch (Exception ex) {
                     try {
@@ -231,6 +195,91 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public boolean isVpnConnected() {
             return isVpnActive();
+        }
+
+        @JavascriptInterface
+        public void fetchAuditData() {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    boolean vpn = isVpnActive();
+                    String ip = "Ожидание";
+                    String country = "Неизвестно";
+                    boolean isRu = false;
+                    long pingMs = 0;
+
+                    // Нативный замер пинга до api.anthropic.com
+                    try {
+                        long start = System.currentTimeMillis();
+                        URL u = new URL("https://api.anthropic.com");
+                        HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                        conn.setRequestMethod("HEAD");
+                        conn.setConnectTimeout(3500);
+                        conn.setReadTimeout(3500);
+                        conn.setRequestProperty("User-Agent", "ClaudeBarrier-Android/5.0");
+                        conn.getResponseCode();
+                        pingMs = System.currentTimeMillis() - start;
+                        conn.disconnect();
+                    } catch (Exception e) {
+                        try {
+                            long start2 = System.currentTimeMillis();
+                            URL u2 = new URL("https://1.1.1.1");
+                            HttpURLConnection conn2 = (HttpURLConnection) u2.openConnection();
+                            conn2.setRequestMethod("HEAD");
+                            conn2.setConnectTimeout(2500);
+                            conn2.getResponseCode();
+                            pingMs = System.currentTimeMillis() - start2;
+                            conn2.disconnect();
+                        } catch (Exception ignored) {}
+                    }
+
+                    // Нативный запрос IP и страны через HTTP
+                    try {
+                        URL url = new URL("http://ip-api.com/json");
+                        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                        conn.setConnectTimeout(4000);
+                        conn.setReadTimeout(4000);
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 ClaudeBarrier");
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) sb.append(line);
+                        reader.close();
+                        conn.disconnect();
+
+                        JSONObject json = new JSONObject(sb.toString());
+                        String cc = json.optString("countryCode", "");
+                        if ("RU".equalsIgnoreCase(cc) || "BY".equalsIgnoreCase(cc)) {
+                            isRu = true;
+                            country = "RU".equalsIgnoreCase(cc) ? "Россия" : "Беларусь";
+                        } else {
+                            ip = json.optString("query", "Защищен");
+                            country = json.optString("country", "Зарубежный шлюз");
+                        }
+                    } catch (Exception ex) {
+                        if (!vpn) isRu = true;
+                    }
+
+                    final String resIp = ip;
+                    final String resCountry = country;
+                    final boolean resIsRu = isRu;
+                    final boolean resVpn = vpn;
+                    final long resPing = pingMs;
+
+                    handler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (webView != null) {
+                                String js = String.format(
+                                    "if (window.onAuditResult) { window.onAuditResult(%b, '%s', '%s', %b, %d); }",
+                                    resVpn, resIp, resCountry, resIsRu, resPing
+                                );
+                                webView.evaluateJavascript(js, null);
+                            }
+                        }
+                    });
+                }
+            }).start();
         }
 
         @JavascriptInterface

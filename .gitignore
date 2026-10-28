@@ -7,3 +7,12 @@ bin/
 obj/
 tools/
 android_app/build/
+claude_emblem_*.png
+raw_claude_*.png
+test_*.png
+temp_*.png
+perfect_*.png
+b64_emblems.cs
+generate_b64.py
+render_claude_assets.py
+create_perfect_claude_assets.py

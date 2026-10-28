@@ -17,7 +17,7 @@ if not exist "%CSC%" (
 if not exist "dist" mkdir "dist"
 
 echo [*] [1/5] Compiling Uninstall_Project_XO.exe (System Uninstaller Tool)...
-"%CSC%" /target:winexe /optimize+ /win32icon:"app_icon.ico" /resource:app_icon.ico,app_icon.ico /out:"dist\Uninstall_Project_XO.exe" "src\Uninstall_Project_XO.cs"
+"%CSC%" /target:winexe /optimize+ /win32icon:"app_icon.ico" /resource:app_icon.ico,app_icon.ico /resource:app_icon.png,app_icon.png /out:"dist\Uninstall_Project_XO.exe" "src\Uninstall_Project_XO.cs"
 if %errorlevel% neq 0 (
     echo [!] Failed to compile Uninstall_Project_XO.exe
     exit /b %errorlevel%
@@ -26,7 +26,7 @@ echo [+] Uninstall_Project_XO.exe built successfully.
 
 echo.
 echo [*] [2/5] Compiling ProjectXO.exe (Vector GUI Shield with Tray Guard, DoH and Live Logs)...
-"%CSC%" /target:winexe /optimize+ /win32icon:"app_icon.ico" /resource:app_icon.ico,app_icon.ico /out:"dist\ProjectXO.exe" "src\ProjectXO.cs"
+"%CSC%" /target:winexe /optimize+ /win32icon:"app_icon.ico" /resource:app_icon.ico,app_icon.ico /resource:app_icon.png,app_icon.png /out:"dist\ProjectXO.exe" "src\ProjectXO.cs"
 if %errorlevel% neq 0 (
     echo [!] Failed to compile ProjectXO.exe
     exit /b %errorlevel%

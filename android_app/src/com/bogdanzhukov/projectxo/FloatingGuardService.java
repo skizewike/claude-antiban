@@ -22,10 +22,8 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 public class FloatingGuardService extends Service {
     private WindowManager windowManager;
@@ -34,7 +32,6 @@ public class FloatingGuardService extends Service {
     private Handler handler;
     private Vibrator vibrator;
     private boolean isRunning = false;
-    private ImageView imgIcon;
     private TextView lblStatus;
     private GradientDrawable bgDrawable;
 
@@ -60,7 +57,7 @@ public class FloatingGuardService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel chan = new NotificationChannel(
                 channelId,
-                "Project XO Guard Service",
+                "Claude Anti-Ban Guard",
                 NotificationManager.IMPORTANCE_LOW
             );
             chan.setDescription("Фоновый мониторинг утечек Claude");
@@ -82,9 +79,9 @@ public class FloatingGuardService extends Service {
         }
 
         Notification notification = builder
-            .setContentTitle("Project XO // BOGDAN ZHUKOV")
-            .setContentText("Умный режим защиты Claude активен поверх окон")
-            .setSmallIcon(R.drawable.ic_launcher)
+            .setContentTitle("Claude Anti-Ban Barrier")
+            .setContentText("Защита Claude активна поверх окон")
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build();
@@ -112,50 +109,41 @@ public class FloatingGuardService extends Service {
         params.x = 40;
         params.y = 200;
 
-        // Create Container Layout
         LinearLayout container = new LinearLayout(this);
         container.setOrientation(LinearLayout.HORIZONTAL);
-        container.setPadding(16, 12, 20, 12);
+        container.setPadding(20, 14, 20, 14);
         container.setGravity(Gravity.CENTER_VERTICAL);
 
         bgDrawable = new GradientDrawable();
-        bgDrawable.setColor(Color.argb(235, 18, 20, 26));
-        bgDrawable.setCornerRadius(32f);
-        bgDrawable.setStroke(3, Color.rgb(16, 185, 129)); // Initial green safe border
+        bgDrawable.setColor(Color.parseColor("#E61A1B22"));
+        bgDrawable.setCornerRadius(28);
+        bgDrawable.setStroke(3, Color.parseColor("#CC785C"));
         container.setBackground(bgDrawable);
 
-        imgIcon = new ImageView(this);
-        imgIcon.setImageResource(R.drawable.ic_launcher);
-        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(54, 54);
-        iconParams.setMargins(0, 0, 12, 0);
-        imgIcon.setLayoutParams(iconParams);
-        container.addView(imgIcon);
-
         lblStatus = new TextView(this);
-        lblStatus.setText("XO: ЗАЩИЩЕНО");
-        lblStatus.setTextColor(Color.rgb(16, 185, 129));
-        lblStatus.setTextSize(12f);
+        lblStatus.setText("CLAUDE SHIELD: OK");
+        lblStatus.setTextColor(Color.parseColor("#CC785C"));
+        lblStatus.setTextSize(11);
+        lblStatus.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         container.addView(lblStatus);
 
         floatingView = container;
 
-        // Drag and Touch Listener
         floatingView.setOnTouchListener(new View.OnTouchListener() {
-            private int initialX, initialY;
-            private float initialTouchX, initialTouchY;
-            private long touchStartTime;
+            private int initialX;
+            private int initialY;
+            private float initialTouchX;
+            private float initialTouchY;
 
             @Override
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
-                        touchStartTime = System.currentTimeMillis();
                         initialX = params.x;
                         initialY = params.y;
                         initialTouchX = event.getRawX();
                         initialTouchY = event.getRawY();
                         return true;
-
                     case MotionEvent.ACTION_MOVE:
                         params.x = initialX + (int) (event.getRawX() - initialTouchX);
                         params.y = initialY + (int) (event.getRawY() - initialTouchY);
@@ -163,16 +151,11 @@ public class FloatingGuardService extends Service {
                             windowManager.updateViewLayout(floatingView, params);
                         } catch (Exception ignored) {}
                         return true;
-
                     case MotionEvent.ACTION_UP:
-                        long duration = System.currentTimeMillis() - touchStartTime;
-                        float diffX = Math.abs(event.getRawX() - initialTouchX);
-                        float diffY = Math.abs(event.getRawY() - initialTouchY);
-                        if (duration < 250 && diffX < 10 && diffY < 10) {
-                            // Tap action -> Open Project XO
-                            Intent openIntent = new Intent(FloatingGuardService.this, MainActivity.class);
-                            openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                            startActivity(openIntent);
+                        if (Math.abs(event.getRawX() - initialTouchX) < 10 && Math.abs(event.getRawY() - initialTouchY) < 10) {
+                            Intent appIntent = new Intent(FloatingGuardService.this, MainActivity.class);
+                            appIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(appIntent);
                         }
                         return true;
                 }
@@ -182,9 +165,7 @@ public class FloatingGuardService extends Service {
 
         try {
             windowManager.addView(floatingView, params);
-        } catch (Exception ex) {
-            Toast.makeText(this, "Не удалось создать плавающий виджет: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
-        }
+        } catch (Exception ignored) {}
     }
 
     private void startMonitoringLoop() {
@@ -194,14 +175,14 @@ public class FloatingGuardService extends Service {
             public void run() {
                 while (isRunning) {
                     try {
-                        Thread.sleep(1200);
+                        Thread.sleep(1500);
                     } catch (InterruptedException ignored) {}
 
-                    final boolean vpnOk = isVpnConnected();
+                    final boolean vpn = isVpnActive();
                     handler.post(new Runnable() {
                         @Override
                         public void run() {
-                            updateStatus(vpnOk);
+                            updateStatus(vpn);
                         }
                     });
                 }
@@ -209,7 +190,7 @@ public class FloatingGuardService extends Service {
         }).start();
     }
 
-    private boolean isVpnConnected() {
+    private boolean isVpnActive() {
         try {
             ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
             if (cm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -223,20 +204,25 @@ public class FloatingGuardService extends Service {
         return false;
     }
 
-    private void updateStatus(boolean vpnOk) {
-        if (floatingView == null || bgDrawable == null) return;
-        if (vpnOk) {
-            bgDrawable.setStroke(3, Color.rgb(16, 185, 129));
-            lblStatus.setText("XO: ЗАЩИЩЕНО");
-            lblStatus.setTextColor(Color.rgb(16, 185, 129));
+    private void updateStatus(boolean isSafe) {
+        if (lblStatus == null || bgDrawable == null) return;
+        if (isSafe) {
+            lblStatus.setText("CLAUDE: ЗАЩИЩЕНО");
+            lblStatus.setTextColor(Color.parseColor("#CC785C"));
+            bgDrawable.setStroke(3, Color.parseColor("#CC785C"));
         } else {
-            bgDrawable.setStroke(4, Color.rgb(239, 68, 68));
-            lblStatus.setText("XO: ОПАСНОСТЬ!");
-            lblStatus.setTextColor(Color.rgb(239, 68, 68));
+            lblStatus.setText("ВНИМАНИЕ: НЕТ VPN!");
+            lblStatus.setTextColor(Color.parseColor("#EF4444"));
+            bgDrawable.setStroke(3, Color.parseColor("#EF4444"));
             if (vibrator != null) {
-                try { vibrator.vibrate(300); } catch (Exception ignored) {}
+                try {
+                    vibrator.vibrate(300);
+                } catch (Exception ignored) {}
             }
         }
+        try {
+            floatingView.invalidate();
+        } catch (Exception ignored) {}
     }
 
     @Override
