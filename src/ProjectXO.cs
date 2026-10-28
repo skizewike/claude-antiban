@@ -1349,6 +1349,10 @@ namespace ProjectXO {
             };
 
             Shown += (s, e) => {
+                if (args != null && Array.IndexOf(args, "--minimized") >= 0) {
+                    Hide();
+                    if (_heroCloud != null) _heroCloud.PauseAnimation();
+                }
                 Log("SYSTEM", "Барьер запущен с правами администратора. Служба ядра WFP готова к работе.", Color.FromArgb(52, 211, 153));
                 if (LicenseManager.IsActivated()) {
                     Log("LICENSE", "Лицензия подтверждена (Защищено Windows DPAPI). Запуск защиты.", Color.FromArgb(52, 211, 153));
@@ -3410,6 +3414,9 @@ namespace ProjectXO {
                         }
                     }
 
+                    if (!string.IsNullOrEmpty(loc) && loc.StartsWith("/")) {
+                        loc = "https://github.com" + loc;
+                    }
                     SafeInvoke(() => {
                         _latestReleaseUrl = string.IsNullOrEmpty(loc) ? "https://github.com/skizewike/claude-antiban/releases/latest" : loc;
                         string curVer = "v6.0.2";
@@ -3461,6 +3468,8 @@ namespace ProjectXO {
             try {
                 string cleanA = (vA ?? "").TrimStart('v', 'V').Trim();
                 string cleanB = (vB ?? "").TrimStart('v', 'V').Trim();
+                if (cleanA.Contains("-")) cleanA = cleanA.Split('-')[0];
+                if (cleanB.Contains("-")) cleanB = cleanB.Split('-')[0];
                 Version verA = new Version(cleanA);
                 Version verB = new Version(cleanB);
                 return verA.CompareTo(verB);
@@ -4380,6 +4389,11 @@ namespace ProjectXO {
 
         // Bug 1, 3, 4, 6: Watchdog с проверкой маршрута, утечек IPv6 и целостности WFP
         private void StartWatchdog() {
+            if (_watchdogTimer != null) {
+                _watchdogTimer.Stop();
+                _watchdogTimer.Dispose();
+                _watchdogTimer = null;
+            }
             _watchdogTimer = new System.Windows.Forms.Timer();
             _watchdogTimer.Interval = 1500;
             _watchdogTimer.Tick += (s, e) => {

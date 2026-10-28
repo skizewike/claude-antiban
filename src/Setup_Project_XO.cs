@@ -536,6 +536,15 @@ namespace ProjectXO.Installer {
 
             System.Threading.ThreadPool.QueueUserWorkItem((st) => {
                 try {
+                    SetProgress(15, "Остановка работающих процессов ClaudeBarrier...");
+                    try {
+                        foreach (string name in new string[] { "ClaudeBarrier", "ProjectXO" }) {
+                            foreach (Process p in Process.GetProcessesByName(name)) {
+                                try { p.Kill(); p.WaitForExit(2000); } catch {}
+                            }
+                        }
+                    } catch {}
+
                     string targetDir = _targetDirectory;
                     if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
 
@@ -625,20 +634,25 @@ namespace ProjectXO.Installer {
                 ProcessStartInfo psi = new ProcessStartInfo {
                     FileName = "powershell.exe",
                     Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" +
-                        "Remove-NetFirewallRule -DisplayName 'Claude-Shield-*' -ErrorAction SilentlyContinue; " +
+                        "$ErrorActionPreference = 'SilentlyContinue'; " +
+                        "Get-NetFirewallRule | Where-Object { $_.Name -like 'Claude-Shield*' -or $_.DisplayName -like 'Claude-Shield*' } | Remove-NetFirewallRule; " +
+                        "Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -like 'Claude-Shield*' -or (Get-ItemPropertyValue 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' $_.Name) -like '*Claude-Shield*' } | ForEach-Object { Remove-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' -Name $_.Name }; " +
                         "$vpnPattern = 'Wintun|WireGuard|TAP|TUN|Virtual|Tailscale|Amnezia|WARP|Mullvad|Proton|Neko|Sing-box|Clash|v2ray|Hiddify|VPN|wwan'; " +
-                        "$phys = @(Get-NetAdapter | Where-Object { $_.InterfaceDescription -notmatch $vpnPattern -and $_.Name -notmatch $vpnPattern -and ($_.PhysicalMediaType -match '802.11|802.3|Native 802.11' -or $_.Name -match 'Wi-Fi|Ethernet|Беспроводная') } | Select-Object -ExpandProperty Name); " +
-                        "foreach ($a in $phys) { " +
-                        "  New-NetFirewallRule -DisplayName ('Claude-Shield-Block-IPv4-' + $a) -Direction Outbound -RemoteAddress '160.79.104.0/23' -InterfaceAlias $a -Action Block -ErrorAction SilentlyContinue | Out-Null; " +
-                        "  New-NetFirewallRule -DisplayName ('Claude-Shield-Block-IPv6-' + $a) -Direction Outbound -RemoteAddress '2607:6bc0::/32' -InterfaceAlias $a -Action Block -ErrorAction SilentlyContinue | Out-Null; " +
-                        "  New-NetFirewallRule -DisplayName ('Claude-Shield-Block-App-' + $a) -Direction Outbound -Program 'Claude.exe' -InterfaceAlias $a -Action Block -ErrorAction SilentlyContinue | Out-Null; " +
-                        "  New-NetFirewallRule -DisplayName ('Claude-Shield-Block-Desk-' + $a) -Direction Outbound -Program 'claude-desktop.exe' -InterfaceAlias $a -Action Block -ErrorAction SilentlyContinue | Out-Null; " +
-                        "  New-NetFirewallRule -DisplayName ('Claude-Shield-Block-CLI-' + $a) -Direction Outbound -Program 'claude.exe' -InterfaceAlias $a -Action Block -ErrorAction SilentlyContinue | Out-Null; " +
-                        "  New-NetFirewallRule -DisplayName ('Claude-Shield-Block-Pkg-' + $a) -Direction Outbound -PackageFamilyName 'Claude_pzs8sxrjxfjjc' -InterfaceAlias $a -Action Block -ErrorAction SilentlyContinue | Out-Null; " +
-                        "  Disable-NetAdapterBinding -Name $a -ComponentId ms_tcpip6 -ErrorAction SilentlyContinue; " +
+                        "$adapters = @(Get-NetAdapter | Where-Object { $_.InterfaceDescription -notmatch $vpnPattern -and $_.Name -notmatch $vpnPattern -and $_.Status -ne 'Disabled' } | Select-Object -ExpandProperty Name); " +
+                        "$idx = 1; " +
+                        "foreach ($a in $adapters) { " +
+                        "  $id = ($a -replace '[^a-zA-Z0-9]','_'); " +
+                        "  New-NetFirewallRule -Name ('Claude-Shield-IPv4-' + $id) -DisplayName ('Claude-Shield-Block-IPv4-' + $a) -Direction Outbound -RemoteAddress '160.79.104.0/23' -InterfaceAlias $a -Action Block | Out-Null; " +
+                        "  New-NetFirewallRule -Name ('Claude-Shield-IPv6-' + $id) -DisplayName ('Claude-Shield-Block-IPv6-' + $a) -Direction Outbound -RemoteAddress '2607:6bc0::/32' -InterfaceAlias $a -Action Block | Out-Null; " +
+                        "  New-NetFirewallRule -Name ('Claude-Shield-App-' + $id) -DisplayName ('Claude-Shield-Block-App-' + $a) -Direction Outbound -Program 'Claude.exe' -InterfaceAlias $a -Action Block | Out-Null; " +
+                        "  New-NetFirewallRule -Name ('Claude-Shield-Desk-' + $id) -DisplayName ('Claude-Shield-Block-Desk-' + $a) -Direction Outbound -Program 'claude-desktop.exe' -InterfaceAlias $a -Action Block | Out-Null; " +
+                        "  New-NetFirewallRule -Name ('Claude-Shield-CLI-' + $id) -DisplayName ('Claude-Shield-Block-CLI-' + $a) -Direction Outbound -Program 'claude.exe' -InterfaceAlias $a -Action Block | Out-Null; " +
+                        "  New-NetFirewallRule -Name ('Claude-Shield-Pkg-' + $id) -DisplayName ('Claude-Shield-Block-Pkg-' + $a) -Direction Outbound -PackageFamilyName 'Claude_pzs8sxrjxfjjc' -InterfaceAlias $a -Action Block | Out-Null; " +
+                        "  Disable-NetAdapterBinding -Name $a -ComponentId ms_tcpip6; " +
+                        "  $idx++; " +
                         "} " +
                         "if (!(Test-Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient')) { New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' -Force | Out-Null }; " +
-                        "Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' -Name 'DisableSmartNameResolution' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue; " +
+                        "Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' -Name 'DisableSmartNameResolution' -Value 1 -Type DWord -Force; " +
                         "Clear-DnsClientCache\"",
                     CreateNoWindow = true,
                     UseShellExecute = false,

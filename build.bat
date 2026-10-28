@@ -63,6 +63,7 @@ echo.
 if exist "%USERPROFILE%\Desktop" (
     echo [*] Deploying release artifacts to Desktop...
     copy /y "dist\ClaudeBarrier-Setup-x64.exe" "%USERPROFILE%\Desktop\" >nul
+    copy /y "dist\ClaudeBarrier.exe" "%USERPROFILE%\Desktop\" >nul 2>&1
     copy /y "dist\ClaudeBarrier-Windows-Portable-x64.zip" "%USERPROFILE%\Desktop\" >nul
     if exist "dist\ClaudeBarrier-Android.apk" copy /y "dist\ClaudeBarrier-Android.apk" "%USERPROFILE%\Desktop\" >nul
     echo [+] Release packages copied to %USERPROFILE%\Desktop\

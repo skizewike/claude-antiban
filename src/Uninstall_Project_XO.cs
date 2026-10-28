@@ -433,7 +433,10 @@ namespace ProjectXO.Uninstaller {
                     try {
                         Process pFw = new Process();
                         pFw.StartInfo.FileName = "powershell.exe";
-                        pFw.StartInfo.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"Remove-NetFirewallRule -DisplayName 'Claude-Shield-*' -ErrorAction SilentlyContinue\"";
+                        pFw.StartInfo.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" +
+                            "$ErrorActionPreference = 'SilentlyContinue'; " +
+                            "Get-NetFirewallRule | Where-Object { $_.Name -like 'Claude-Shield*' -or $_.DisplayName -like 'Claude-Shield*' } | Remove-NetFirewallRule; " +
+                            "Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -like 'Claude-Shield*' -or (Get-ItemPropertyValue 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' $_.Name) -like '*Claude-Shield*' } | ForEach-Object { Remove-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' -Name $_.Name };\"";
                         pFw.StartInfo.CreateNoWindow = true;
                         pFw.StartInfo.UseShellExecute = false;
                         pFw.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;

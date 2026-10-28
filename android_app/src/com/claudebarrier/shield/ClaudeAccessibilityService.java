@@ -13,6 +13,8 @@ public class ClaudeAccessibilityService extends AccessibilityService {
     private static ClaudeAccessibilityService instance;
     private Handler handler;
     private ActivityManager activityManager;
+    private long lastInterceptTime = 0;
+    private VpnMonitor vpnMonitorInstance;
 
     public static ClaudeAccessibilityService getInstance() {
         return instance;
@@ -39,14 +41,21 @@ public class ClaudeAccessibilityService extends AccessibilityService {
 
         String pkgName = pkg.toString();
         if (AppConstants.TARGET_CLAUDE_PKG.equals(pkgName)) {
+            long now = System.currentTimeMillis();
+            if (now - lastInterceptTime < 2000) {
+                return;
+            }
             // Claude is attempting to enter foreground
             SharedPreferences sp = getSharedPreferences(AppConstants.PREFS_NAME, Context.MODE_PRIVATE);
             boolean preemptiveGuard = sp.getBoolean(AppConstants.KEY_PREEMPTIVE_GUARD, true);
 
-            VpnMonitor vpnMon = new VpnMonitor(this);
-            boolean isVpnSafe = vpnMon.isVpnActive();
+            if (vpnMonitorInstance == null) {
+                vpnMonitorInstance = new VpnMonitor(this);
+            }
+            boolean isVpnSafe = vpnMonitorInstance.isVpnActive();
 
             if (!isVpnSafe && preemptiveGuard) {
+                lastInterceptTime = now;
                 // VPN is OFF! Preemptively intercept and boot to Home
                 LogManager.log("KILLSWITCH", "ПРЕВЕНТИВНЫЙ БАРЬЕР: Запуск Claude без VPN заблокирован!", "KILL");
                 emergencyKillAndPurgeClaude("Запуск Claude заблокирован: безопасный VPN выключен!");
