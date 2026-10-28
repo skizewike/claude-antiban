@@ -1,473 +1,757 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Claude Anti-Ban Barrier — Bogdan Zhukov</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-        body {
-            background-color: #0E0F13;
-            color: #F4F4F5;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            overflow-x: hidden;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ClaudeBarrier Android Sentinel</title>
+<style>
+  :root {
+    --bg-main: #0D0F15;
+    --card-bg: #131620;
+    --card-border: #222738;
+    --card-border-hover: #333C52;
+    --text-primary: #F8FAFC;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --accent-blue: #2563EB;
+    --accent-blue-hover: #3B82F6;
+    --accent-cyan: #38BDF8;
+    --safe-green: #34D399;
+    --warn-amber: #F59E0B;
+    --danger-red: #EF4444;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; -webkit-tap-highlight-color: transparent; }
+  body {
+    background: var(--bg-main);
+    color: var(--text-primary);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
 
-        .header {
-            background: linear-gradient(180deg, #181920 0%, #121317 100%);
-            padding: 16px;
-            border-bottom: 1px solid #262730;
-            text-align: center;
-        }
-        .header-title {
-            font-size: 14px;
-            font-weight: 800;
-            color: #CC785C;
-            letter-spacing: 0.8px;
-            text-transform: uppercase;
-        }
-        .header-sub {
-            font-size: 10.5px;
-            color: #A1A1AA;
-            margin-top: 3px;
-        }
+  /* Top App Bar */
+  .app-bar {
+    height: 56px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #1A1E2B;
+    background: rgba(13, 15, 21, 0.98);
+    flex-shrink: 0;
+  }
+  .app-bar .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .app-bar .brand-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #CC785C, #9E4B33);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 14px;
+    color: white;
+    box-shadow: 0 2px 8px rgba(204, 120, 92, 0.35);
+  }
+  .app-bar .brand-text {
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: -0.2px;
+  }
+  .app-bar .brand-sub {
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .app-bar .vpn-badge {
+    padding: 5px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(52, 211, 153, 0.12);
+    color: var(--safe-green);
+    border: 1px solid rgba(52, 211, 153, 0.3);
+    transition: all 0.25s ease;
+  }
+  .vpn-badge .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--safe-green);
+    box-shadow: 0 0 8px var(--safe-green);
+  }
 
-        .canvas-container {
-            position: relative;
-            width: 100%;
-            height: 220px;
-            background: radial-gradient(circle at center, #1C1D24 0%, #0E0F13 100%);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            border-bottom: 1px solid #22232C;
-        }
-        canvas {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
+  /* Content Scroll Area */
+  .content-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+  }
+  .content-area::-webkit-scrollbar { display: none; }
+  .tab-page { display: none; flex-direction: column; gap: 14px; padding-bottom: 24px; }
+  .tab-page.active { display: flex; }
 
-        .content {
-            padding: 16px;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
+  /* Cards */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .card-title {
+    font-size: 11.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
 
-        .section-label {
-            font-size: 10px;
-            font-weight: 700;
-            color: #71717A;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            margin-top: 4px;
-        }
+  /* Hero Status Card (Tab 1) */
+  .hero-card {
+    padding: 24px 16px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    background: linear-gradient(180deg, #161A28 0%, #12141F 100%);
+    border: 1px solid #283048;
+    position: relative;
+    overflow: hidden;
+  }
+  .shield-circle {
+    width: 82px;
+    height: 82px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(52, 211, 153, 0.18) 0%, rgba(52, 211, 153, 0.02) 70%);
+    border: 2px solid var(--safe-green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 25px rgba(52, 211, 153, 0.25);
+    transition: all 0.3s ease;
+  }
+  .hero-status-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text-primary);
+  }
+  .hero-status-sub {
+    font-size: 12px;
+    color: var(--text-secondary);
+    max-width: 280px;
+    line-height: 1.4;
+    margin-top: 4px;
+  }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    margin-top: 4px;
+  }
+  .stat-item {
+    background: rgba(20, 24, 36, 0.6);
+    border: 1px solid #1E2436;
+    border-radius: 10px;
+    padding: 10px 10px;
+    text-align: left;
+  }
+  .stat-item .label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }
+  .stat-item .value { font-size: 12.5px; font-weight: 700; color: var(--text-primary); margin-top: 2px; }
 
-        .smart-panel {
-            background: rgba(26, 27, 34, 0.7);
-            border: 1px solid #2A2B35;
-            border-radius: 10px;
-            padding: 14px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-        .smart-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .smart-text h4 {
-            font-size: 13px;
-            color: #F4F4F5;
-            margin-bottom: 2px;
-            font-weight: 600;
-        }
-        .smart-text p {
-            font-size: 11px;
-            color: #A1A1AA;
-        }
-        .toggle-btn {
-            background: #252630;
-            color: #CC785C;
-            border: 1px solid #3E404D;
-            padding: 8px 14px;
-            border-radius: 8px;
-            font-size: 11px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        .toggle-btn.active {
-            background: #CC785C;
-            color: #FFFFFF;
-            border-color: #DE8A6E;
-        }
+  /* Buttons */
+  .btn {
+    width: 100%;
+    padding: 14px 18px;
+    border-radius: 10px;
+    border: none;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.15s ease;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent-blue), #1D4ED8);
+    color: white;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+  }
+  .btn-claude {
+    background: linear-gradient(135deg, #CC785C, #B3583C);
+    color: white;
+    box-shadow: 0 4px 14px rgba(204, 120, 92, 0.35);
+  }
+  .btn-danger {
+    background: linear-gradient(135deg, var(--danger-red), #B91C1C);
+    color: white;
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+  }
+  .btn-ghost {
+    background: #181C28;
+    color: var(--text-secondary);
+    border: 1px solid var(--card-border);
+  }
 
-        .card {
-            background: rgba(24, 25, 31, 0.8);
-            border: 1px solid #262732;
-            border-radius: 10px;
-            overflow: hidden;
-        }
-        .card-header {
-            padding: 12px 14px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-        }
-        .card-title { font-size: 12.5px; font-weight: 600; color: #F4F4F5; }
-        .card-badge {
-            font-size: 10.5px;
-            font-weight: 700;
-            padding: 3px 8px;
-            border-radius: 6px;
-        }
-        .badge-safe { background: #2B231F; color: #CC785C; border: 1px solid #48342C; }
-        .badge-danger { background: #331A1C; color: #F87171; border: 1px solid #502124; }
-        .badge-warn { background: #31261B; color: #FBBF24; border: 1px solid #4C3922; }
+  /* Setting row with toggle */
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+  }
+  .setting-info { display: flex; flex-direction: column; gap: 3px; max-width: 260px; }
+  .setting-title { font-size: 13.5px; font-weight: 600; color: var(--text-primary); }
+  .setting-desc { font-size: 11px; color: var(--text-secondary); line-height: 1.35; }
 
-        .card-body {
-            display: none;
-            padding: 12px 14px;
-            background: #14151A;
-            border-top: 1px solid #22232C;
-            font-size: 11px;
-            line-height: 1.5;
-            color: #A1A1AA;
-        }
-        .card.expanded .card-body { display: block; }
+  /* iOS style Toggle Switch */
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #242938;
+    transition: .22s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 24px;
+    border: 1px solid #333C52;
+  }
+  .slider:before {
+    position: absolute; content: ""; height: 18px; width: 18px; left: 2px; bottom: 2px;
+    background-color: white;
+    transition: .22s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 50%;
+  }
+  input:checked + .slider { background-color: var(--accent-blue); border-color: #60A5FA; }
+  input:checked + .slider:before { transform: translateX(20px); }
 
-        .launch-status {
-            padding: 10px 14px;
-            border-radius: 8px;
-            font-size: 11.5px;
-            font-weight: 700;
-            text-align: center;
-        }
-        .status-safe { background: #241E1C; color: #CC785C; border: 1px solid #44322A; }
-        .status-danger { background: #2E1B1E; color: #F87171; border: 1px solid #4C2427; }
+  /* Terminal Live Log Card (Tab 5) */
+  .terminal-box {
+    background: #090B10;
+    border: 1px solid #1E2332;
+    border-radius: 10px;
+    height: 400px;
+    overflow-y: auto;
+    padding: 12px;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 11.5px;
+    line-height: 1.5;
+  }
+  .log-line { margin-bottom: 4px; word-break: break-all; }
+  .log-time { color: var(--text-muted); }
+  .log-safe { color: var(--safe-green); font-weight: 700; }
+  .log-warn { color: var(--warn-amber); font-weight: 700; }
+  .log-err { color: var(--danger-red); font-weight: 700; }
+  .log-net { color: var(--accent-cyan); font-weight: 700; }
 
-        .actions-area {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            margin-top: 4px;
-        }
-        .btn-launch-primary {
-            background: linear-gradient(135deg, #CC785C 0%, #B96447 100%);
-            color: #FFFFFF;
-            border: none;
-            padding: 14px;
-            border-radius: 10px;
-            font-size: 13.5px;
-            font-weight: 700;
-            cursor: pointer;
-            text-align: center;
-            box-shadow: 0 4px 14px rgba(204, 120, 92, 0.25);
-        }
-        .btn-launch-primary.blocked {
-            background: #2E1C20;
-            color: #F87171;
-            border: 1px solid #55272B;
-            box-shadow: none;
-        }
-        .btn-secondary {
-            background: #1C1D24;
-            color: #E4E4E7;
-            border: 1px solid #30313E;
-            padding: 11px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            text-align: center;
-        }
+  /* Chip Toolbar (Desktop Style) */
+  .chip-toolbar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    overflow-x: auto;
+  }
+  .chip-toolbar::-webkit-scrollbar { display: none; }
+  .chip {
+    padding: 6px 14px;
+    background: #181C28;
+    border: 1px solid #283044;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .chip.active {
+    background: linear-gradient(135deg, var(--accent-blue), #1D4ED8);
+    color: white;
+    border-color: #60A5FA;
+  }
 
-        .log-box {
-            background: #0A0B0E;
-            border: 1px solid #22232C;
-            border-radius: 8px;
-            padding: 10px;
-            font-family: monospace;
-            font-size: 10px;
-            color: #A1A1AA;
-            height: 90px;
-            overflow-y: auto;
-            line-height: 1.4;
-        }
-
-        .footer {
-            padding: 14px;
-            text-align: center;
-            font-size: 10.5px;
-            color: #71717A;
-            border-top: 1px solid #20212A;
-            background: #121317;
-        }
-    </style>
+  /* Bottom Navigation Bar (5 Tabs) */
+  .bottom-nav {
+    height: 64px;
+    background: #10121A;
+    border-top: 1px solid #1C202E;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    align-items: center;
+    padding: 0 4px;
+    flex-shrink: 0;
+  }
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 100%;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.15s ease;
+  }
+  .nav-item svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .nav-item span { font-size: 10px; font-weight: 600; letter-spacing: -0.1px; }
+  .nav-item.active { color: var(--accent-cyan); }
+  .nav-item.active svg { stroke: var(--accent-cyan); }
+</style>
 </head>
 <body>
-    <div class="header">
-        <div class="header-title">CLAUDE ANTI-BAN BARRIER</div>
-        <div class="header-sub">Аппаратный мобильный экран изоляции // ClaudeBarrier</div>
+
+  <!-- Top App Bar -->
+  <div class="app-bar">
+    <div class="brand">
+      <div class="brand-icon">CB</div>
+      <div>
+        <div class="brand-text">ClaudeBarrier</div>
+        <div class="brand-sub">Mobile Shield Sentinel</div>
+      </div>
+    </div>
+    <div class="vpn-badge" id="appVpnBadge">
+      <div class="dot" id="badgeDot"></div>
+      <span id="badgeText">VPN SAFE</span>
+    </div>
+  </div>
+
+  <!-- Content Area -->
+  <div class="content-area">
+
+    <!-- TAB 1: Главная (Home) -->
+    <div class="tab-page active" id="page-home">
+      <div class="card hero-card" id="heroCard">
+        <div class="shield-circle" id="heroShield">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="heroIcon" stroke="#34D399">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="hero-status-title" id="heroTitle">Защита активна</div>
+          <div class="hero-status-sub" id="heroSub">VPN туннель надежен. Прямой доступ к подсетям Anthropic изолирован.</div>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-item">
+            <div class="label">ШЛЮЗ / СТРАНА</div>
+            <div class="value" id="statGateway">Frankfurt, DE 🇩🇪</div>
+          </div>
+          <div class="stat-item">
+            <div class="label">ПИНГ К CLAUDE</div>
+            <div class="value" id="statPing">84 мс (Стабилен)</div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-claude" onclick="launchClaude()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        Открыть Claude под защитой
+      </button>
+
+      <div class="card">
+        <div class="card-title">Состояние защиты</div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-title">Фоновый мониторинг шлюза</div>
+            <div class="setting-desc">Непрерывный аудит целостности туннеля VPN каждые 800 мс.</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" checked onchange="toggleMonitoring(this)">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Аварийный тест</div>
+        <button class="btn btn-danger" onclick="triggerKillTest()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Тест KillSwitch (Симуляция падения VPN)
+        </button>
+      </div>
     </div>
 
-    <div class="canvas-container">
-        <canvas id="animCanvas"></canvas>
+    <!-- TAB 2: Связь (Connection & Sentinel) -->
+    <div class="tab-page" id="page-connect">
+      <div class="card">
+        <div class="card-title">Smart Pre-Drop Sentinel</div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-title">Анализ предвестников сбоя</div>
+            <div class="setting-desc">Предупреждение при резком росте задержки (>1200 мс) или потере пакетов.</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" checked onchange="toggleSentinel(this)">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-title">Защита смены Wi-Fi ➔ LTE</div>
+            <div class="setting-desc">Мгновенный сброс Claude при роуминге между адаптерами.</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Аппаратный KillSwitch</div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-title">Моментальный сброс на Home</div>
+            <div class="setting-desc">Сворачивание приложения за &lt;20 мс при любом обрыве.</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <button class="btn btn-ghost" onclick="openVpnSettings()" style="padding: 10px; font-size: 12px; margin-top: 4px;">
+          Открыть настройки VPN Android
+        </button>
+      </div>
     </div>
 
-    <div class="content">
-        <div class="section-label">Службы контроля</div>
-        <div class="smart-panel">
-            <div class="smart-row">
-                <div class="smart-text">
-                    <h4>Виджет поверх окон</h4>
-                    <p>Плавающий статус защиты во время общения в Claude</p>
-                </div>
-                <button id="btnOverlay" class="toggle-btn" onclick="toggleOverlay()">Включить</button>
-            </div>
-            <div class="smart-row">
-                <div class="smart-text">
-                    <h4>Фоновая защита 24/7</h4>
-                    <p>Исключение из энергосбережения системы Android</p>
-                </div>
-                <button class="toggle-btn" onclick="requestBatteryExemption()">Настроить</button>
-            </div>
+    <!-- TAB 3: Защита (Security & Intercept) -->
+    <div class="tab-page" id="page-security">
+      <div class="card">
+        <div class="card-title">Превентивный барьер запуска</div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-title">Блокировка запуска без VPN</div>
+            <div class="setting-desc">Если VPN не включен, клик по иконке Claude мгновенно выбрасывает на Home.</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" checked onchange="togglePreemptive(this)">
+            <span class="slider"></span>
+          </label>
         </div>
+      </div>
 
-        <div class="section-label">Диагностика туннеля</div>
-        <div class="card" id="cardIp">
-            <div class="card-header" onclick="toggleCard('cardIp')">
-                <span class="card-title">Внешний IPv4 и страна</span>
-                <span id="badgeIp" class="card-badge badge-warn">Проверка...</span>
-            </div>
-            <div class="card-body">
-                <div id="detailIp">Выполняется нативный аудит сетевого шлюза...</div>
-            </div>
+      <div class="card">
+        <div class="card-title">Очистка шторки и недавних задач</div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-title">Recents Auto-Purge</div>
+            <div class="setting-desc">Автоматическое удаление карточки Claude из списка задач через AccessibilityService.</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" checked>
+            <span class="slider"></span>
+          </label>
         </div>
+        <button class="btn btn-primary" onclick="requestAccessibility()" style="padding: 10px; font-size: 12px; margin-top: 4px;">
+          Настроить Accessibility Sentinel
+        </button>
+      </div>
 
-        <div class="section-label">Запуск Claude</div>
-        <div id="launchStatus" class="launch-status status-danger">
-            Проверка соединения...
+      <div class="card">
+        <div class="card-title">Системный аудит Android</div>
+        <div class="setting-desc" style="color: var(--text-secondary); line-height: 1.4;">
+          Для 100% аппаратной защиты рекомендуется включить системную настройку Android:
+          <br><br>
+          <b>Настройки ➔ Сеть и интернет ➔ VPN ➔ Шестеренка вашего VPN ➔ «Блокировать соединения без VPN»</b>.
         </div>
-
-        <div class="actions-area">
-            <button id="btnLaunchApp" class="btn-launch-primary blocked" onclick="launchClaudeApp()">
-                Запустить Claude Mobile
-            </button>
-            <button id="btnLaunchWeb" class="btn-secondary" onclick="launchClaudeWeb()">
-                Открыть claude.ai в браузере
-            </button>
-            <button class="btn-secondary" onclick="runAudit()">
-                Проверить соединение сейчас
-            </button>
-        </div>
-
-        <div class="section-label">Журнал событий</div>
-        <div class="log-box" id="logBox">
-            [SYS] Мобильный барьер Claude запущен.<br>
-            [TLS] DNS-over-HTTPS Cloudflare активен.
-        </div>
+      </div>
     </div>
 
-    <div class="footer">
-        Claude Anti-Ban Barrier v5.0 — Bogdan Zhukov
+    <!-- TAB 4: Настройки (Settings & License) -->
+    <div class="tab-page" id="page-settings">
+      <div class="card">
+        <div class="card-title">Лицензия ClaudeBarrier</div>
+        <div class="setting-title" id="licStatusText" style="color: var(--safe-green); font-size: 13.5px;">
+          Статус: Загрузка...
+        </div>
+        <div id="licMaskedKey" style="font-family: monospace; font-size: 12px; color: var(--text-secondary); margin-top: -4px;">
+          Ключ: ...
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 6px;">
+          <button class="btn btn-ghost" style="padding: 10px; font-size: 12px;" onclick="promptChangeKey()">Ввести ключ</button>
+          <button class="btn btn-primary" style="padding: 10px; font-size: 12px;" onclick="openBotLink()">Бот ключей</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Интерфейс и фоновая работа</div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-title">Плавающий индикатор на экране</div>
+            <div class="setting-desc">Показывать плашку здоровья туннеля поверх Claude.</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" checked onchange="toggleFloatingHead(this)">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <button class="btn btn-ghost" style="padding: 10px; font-size: 12px; margin-top: 4px;" onclick="requestOverlay()">
+          Разрешить наложение поверх окон
+        </button>
+      </div>
     </div>
 
-    <script>
-        const B64_CLAUDE_TERRACOTTA = "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";
-        const B64_CLAUDE_CRIMSON = "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";
+    <!-- TAB 5: Журнал (Live Event Stream) -->
+    <div class="tab-page" id="page-logs">
+      <div class="chip-toolbar">
+        <div class="chip active" onclick="filterLogs('ALL', this)">Все</div>
+        <div class="chip" onclick="filterLogs('ERR', this)">Ошибки</div>
+        <div class="chip" onclick="filterLogs('NET', this)">Сеть</div>
+        <div class="chip" onclick="filterLogs('KILL', this)">KillSwitch</div>
+      </div>
 
-        const imgClaudeTerracotta = new Image();
-        imgClaudeTerracotta.src = "data:image/png;base64," + B64_CLAUDE_TERRACOTTA;
+      <div class="terminal-box" id="terminal"></div>
 
-        const imgClaudeCrimson = new Image();
-        imgClaudeCrimson.src = "data:image/png;base64," + B64_CLAUDE_CRIMSON;
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-ghost" style="padding: 10px; font-size: 12px;" onclick="clearLogs()">Очистить журнал</button>
+        <button class="btn btn-ghost" style="padding: 10px; font-size: 12px;" onclick="refreshLogs()">Обновить</button>
+      </div>
+    </div>
 
-        const canvas = document.getElementById('animCanvas');
-        const ctx = canvas.getContext('2d');
-        let width, height;
-        let phase = 0;
-        let waveRadius = 30;
-        let isSafe = false;
-        let isOverlayEnabled = false;
-        let livePingMs = 0;
-        let country = "";
+  </div>
 
-        function log(msg) {
-            const box = document.getElementById('logBox');
-            const time = new Date().toTimeString().split(' ')[0];
-            box.innerHTML += `<br>[${time}] ${msg}`;
-            box.scrollTop = box.scrollHeight;
+  <!-- Bottom Navigation Bar -->
+  <div class="bottom-nav">
+    <div class="nav-item active" onclick="switchTab('home', this)">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      <span>Главная</span>
+    </div>
+    <div class="nav-item" onclick="switchTab('connect', this)">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+      <span>Связь</span>
+    </div>
+    <div class="nav-item" onclick="switchTab('security', this)">
+      <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span>Защита</span>
+    </div>
+    <div class="nav-item" onclick="switchTab('settings', this)">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Настройки</span>
+    </div>
+    <div class="nav-item" onclick="switchTab('logs', this)">
+      <svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      <span>Журнал</span>
+    </div>
+  </div>
+
+<script>
+  let activeFilter = 'ALL';
+
+  function switchTab(tabId, el) {
+    document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('page-' + tabId).classList.add('active');
+    el.classList.add('active');
+    if (tabId === 'logs') refreshLogs();
+    if (tabId === 'settings') refreshLicenseUI();
+  }
+
+  function updateStatusUI(safe, pingMs, country, isDegraded) {
+    const heroTitle = document.getElementById('heroTitle');
+    const heroSub = document.getElementById('heroSub');
+    const heroShield = document.getElementById('heroShield');
+    const heroIcon = document.getElementById('heroIcon');
+    const badge = document.getElementById('appVpnBadge');
+    const badgeText = document.getElementById('badgeText');
+    const badgeDot = document.getElementById('badgeDot');
+    const statPing = document.getElementById('statPing');
+    const statGateway = document.getElementById('statGateway');
+
+    if (safe) {
+      heroTitle.innerText = "Защита активна";
+      heroTitle.style.color = "var(--text-primary)";
+      heroSub.innerText = "VPN туннель надежен. Прямой доступ к подсетям Anthropic изолирован.";
+      heroShield.style.borderColor = "var(--safe-green)";
+      heroShield.style.boxShadow = "0 0 25px rgba(52, 211, 153, 0.25)";
+      heroIcon.setAttribute("stroke", "#34D399");
+
+      badge.style.background = "rgba(52, 211, 153, 0.12)";
+      badge.style.color = "var(--safe-green)";
+      badge.style.borderColor = "rgba(52, 211, 153, 0.3)";
+      badgeText.innerText = "VPN SAFE";
+      badgeDot.style.background = "var(--safe-green)";
+      badgeDot.style.boxShadow = "0 0 8px var(--safe-green)";
+
+      statPing.innerText = pingMs > 0 ? (pingMs + " мс (Стабилен)") : "В норме";
+      statGateway.innerText = country ? country : "Защищенный шлюз";
+    } else {
+      heroTitle.innerText = "ВНИМАНИЕ // УГРОЗА";
+      heroTitle.style.color = "var(--danger-red)";
+      heroSub.innerText = "VPN туннель разорван! Сокеты Claude заблокированы.";
+      heroShield.style.borderColor = "var(--danger-red)";
+      heroShield.style.boxShadow = "0 0 25px rgba(239, 68, 68, 0.35)";
+      heroIcon.setAttribute("stroke", "#EF4444");
+
+      badge.style.background = "rgba(239, 68, 68, 0.15)";
+      badge.style.color = "var(--danger-red)";
+      badge.style.borderColor = "rgba(239, 68, 68, 0.4)";
+      badgeText.innerText = "VPN LOST";
+      badgeDot.style.background = "var(--danger-red)";
+      badgeDot.style.boxShadow = "0 0 8px var(--danger-red)";
+
+      statPing.innerText = "Обрыв";
+      statGateway.innerText = "Не защищено";
+    }
+  }
+
+  // Java Callbacks
+  window.onVpnStateUpdate = function(connected, ping, country, ip, degraded) {
+    updateStatusUI(connected, ping, country, degraded);
+  };
+
+  window.onVpnDropped = function() {
+    updateStatusUI(false, 0, "", false);
+  };
+
+  function launchClaude() {
+    if (window.AndroidBarrier) {
+      window.AndroidBarrier.launchClaude();
+    }
+  }
+
+  function triggerKillTest() {
+    if (window.AndroidBarrier) {
+      window.AndroidBarrier.triggerEmergencyKillTest();
+    }
+  }
+
+  function openVpnSettings() {
+    if (window.AndroidBarrier) {
+      window.AndroidBarrier.openVpnSettings();
+    }
+  }
+
+  function requestAccessibility() {
+    if (window.AndroidBarrier) {
+      window.AndroidBarrier.requestAccessibility();
+    }
+  }
+
+  function requestOverlay() {
+    if (window.AndroidBarrier) {
+      window.AndroidBarrier.requestOverlayPermission();
+    }
+  }
+
+  function togglePreemptive(el) {
+    if (window.AndroidBarrier) {
+      window.AndroidBarrier.togglePreemptiveGuard(el.checked);
+    }
+  }
+
+  function toggleFloatingHead(el) {
+    if (window.AndroidBarrier) {
+      window.AndroidBarrier.toggleFloatingHead(el.checked);
+    }
+  }
+
+  function promptChangeKey() {
+    const key = prompt("Введите 3-дневный ключ активации ClaudeBarrier:\n(Формат: CB-XXXX-XXXX-XXXX-XXXX)", "");
+    if (key && window.AndroidBarrier) {
+      const ok = window.AndroidBarrier.activateKey(key.trim());
+      if (ok) refreshLicenseUI();
+    }
+  }
+
+  function openBotLink() {
+    window.open("https://t.me/ClaudeBarrierBot", "_blank");
+  }
+
+  function refreshLicenseUI() {
+    if (window.AndroidBarrier) {
+      try {
+        const raw = window.AndroidBarrier.getLicenseInfo();
+        const o = JSON.parse(raw);
+        const statusEl = document.getElementById('licStatusText');
+        const maskEl = document.getElementById('licMaskedKey');
+        if (o.isActivated) {
+          statusEl.innerText = "Статус: Активен (Осталось: " + o.remainingTime + ")";
+          statusEl.style.color = "var(--safe-green)";
+          maskEl.innerText = "Ключ: " + o.maskedKey;
+        } else {
+          statusEl.innerText = "Статус: Не активирован или срок (3 дня) истек";
+          statusEl.style.color = "var(--danger-red)";
+          maskEl.innerText = "Получите ключ в @ClaudeBarrierBot";
         }
+      } catch (e) {}
+    }
+  }
 
-        function resize() {
-            width = canvas.parentElement.clientWidth;
-            height = canvas.parentElement.clientHeight;
-            canvas.width = width * window.devicePixelRatio;
-            canvas.height = height * window.devicePixelRatio;
-            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-        }
-        window.addEventListener('resize', resize);
-        resize();
+  function refreshLogs() {
+    if (window.AndroidBarrier) {
+      try {
+        const raw = window.AndroidBarrier.getLogs();
+        const logs = JSON.parse(raw);
+        const term = document.getElementById('terminal');
+        term.innerHTML = '';
+        logs.forEach(l => {
+          if (activeFilter !== 'ALL') {
+            if (activeFilter === 'ERR' && l.type !== 'ERR') return;
+            if (activeFilter === 'NET' && l.type !== 'NET') return;
+            if (activeFilter === 'KILL' && l.type !== 'KILL') return;
+          }
+          const div = document.createElement('div');
+          div.className = 'log-line';
+          let cls = 'log-net';
+          if (l.type === 'SAFE') cls = 'log-safe';
+          if (l.type === 'WARN') cls = 'log-warn';
+          if (l.type === 'ERR' || l.type === 'KILL') cls = 'log-err';
 
-        function draw() {
-            ctx.clearRect(0, 0, width, height);
-            const cx = width / 2;
-            const cy = height / 2 - 16;
-            const breath = Math.sin(phase);
-            const pulse = breath * 6;
+          div.innerHTML = `<span class="log-time">[${l.time}]</span> <span class="${cls}">[${l.cat}]</span> ${l.msg}`;
+          term.appendChild(div);
+        });
+        term.scrollTop = term.scrollHeight;
+      } catch (e) {}
+    }
+  }
 
-            const img = isSafe ? imgClaudeTerracotta : imgClaudeCrimson;
+  function filterLogs(cat, el) {
+    activeFilter = cat;
+    document.querySelectorAll('.chip-toolbar .chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    refreshLogs();
+  }
 
-            // 1. Объемная атмосферная аура
-            const gradGlow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 95 + pulse);
-            gradGlow.addColorStop(0, isSafe ? 'rgba(204, 120, 92, 0.40)' : 'rgba(239, 68, 68, 0.40)');
-            gradGlow.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = gradGlow;
-            ctx.beginPath();
-            ctx.arc(cx, cy, 95 + pulse, 0, Math.PI * 2);
-            ctx.fill();
+  function clearLogs() {
+    if (window.AndroidBarrier) {
+      window.AndroidBarrier.clearLogs();
+    }
+    document.getElementById('terminal').innerHTML = '';
+  }
 
-            // 2. Волна сонара защиты
-            waveRadius += 0.8;
-            if (waveRadius > 95) waveRadius = 32;
-            const waveAlpha = Math.max(0, 1 - (waveRadius - 32) / 63) * 0.45;
-            ctx.strokeStyle = isSafe ? `rgba(204, 120, 92, ${waveAlpha})` : `rgba(239, 68, 68, ${waveAlpha})`;
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.arc(cx, cy, waveRadius, 0, Math.PI * 2);
-            ctx.stroke();
-
-            // 3. Подлинная дышащая и плавающая эмблема Claude
-            const baseSize = 105;
-            const drawSize = baseSize * (1.0 + 0.045 * breath);
-            const floatAngle = 0.04 * Math.sin(phase * 0.7);
-
-            ctx.save();
-            ctx.translate(cx, cy);
-            ctx.rotate(floatAngle);
-            if (img.complete && img.naturalWidth > 0) {
-                ctx.drawImage(img, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
-            }
-            ctx.restore();
-
-            // 4. Текстовый статус
-            ctx.textAlign = 'center';
-            ctx.font = '700 13px sans-serif';
-            ctx.fillStyle = isSafe ? '#F4F4F5' : '#F87171';
-            ctx.fillText(isSafe ? `Защита активна · ${livePingMs > 0 ? livePingMs + ' мс' : (country || 'VPN OK')}` : 'ВХОД С ПРЕДУПРЕЖДЕНИЕМ', cx, cy + 76);
-
-            ctx.font = '10.5px sans-serif';
-            ctx.fillStyle = '#A1A1AA';
-            ctx.fillText(isSafe ? 'Трафик изолирован · Вход разрешен' : 'Туннель VPN не обнаружен', cx, cy + 92);
-
-            phase += 0.05;
-            requestAnimationFrame(draw);
-        }
-        requestAnimationFrame(draw);
-
-        function toggleCard(id) {
-            document.getElementById(id).classList.toggle('expanded');
-        }
-
-        function toggleOverlay() {
-            isOverlayEnabled = !isOverlayEnabled;
-            const btn = document.getElementById('btnOverlay');
-            if (window.AndroidXO && window.AndroidXO.toggleSmartOverlay) {
-                window.AndroidXO.toggleSmartOverlay(isOverlayEnabled);
-                btn.innerText = isOverlayEnabled ? "Активен" : "Включить";
-                btn.className = isOverlayEnabled ? "toggle-btn active" : "toggle-btn";
-            }
-        }
-
-        function requestBatteryExemption() {
-            if (window.AndroidXO && window.AndroidXO.requestBatteryOptimizationExemption) {
-                window.AndroidXO.requestBatteryOptimizationExemption();
-            }
-        }
-
-        // БЕЗ ЖЕСТКИХ БЛОКИРОВОК: Предупреждение с возможностью запуска
-        function launchClaudeApp() {
-            if (!isSafe) {
-                const proceed = confirm(
-                    "ПРЕДУПРЕЖДЕНИЕ БЕЗОПАСНОСТИ // CLAUDE BARRIER\n\n" +
-                    "VPN-соединение не обнаружено или внешний IP может относиться к РФ/РБ.\n\n" +
-                    "Запустить Claude Mobile принудительно?"
-                );
-                if (!proceed) return;
-            }
-            if (window.AndroidXO && window.AndroidXO.launchClaude) {
-                window.AndroidXO.launchClaude();
-            } else {
-                window.open('https://claude.ai', '_blank');
-            }
-        }
-
-        function launchClaudeWeb() {
-            if (!isSafe) {
-                const proceed = confirm(
-                    "ПРЕДУПРЕЖДЕНИЕ БЕЗОПАСНОСТИ // CLAUDE BARRIER\n\n" +
-                    "VPN-туннель не подтвержден.\n\n" +
-                    "Открыть claude.ai в браузере принудительно?"
-                );
-                if (!proceed) return;
-            }
-            if (window.AndroidXO && window.AndroidXO.launchBrowser) {
-                window.AndroidXO.launchBrowser();
-            } else {
-                window.open('https://claude.ai', '_blank');
-            }
-        }
-
-        function runAudit() {
-            log("[AUDIT] Запуск нативной проверки сети...");
-            if (window.AndroidXO && window.AndroidXO.fetchAuditData) {
-                window.AndroidXO.fetchAuditData();
-            }
-        }
-
-        window.onAuditResult = function(vpnActive, ipStr, countryStr, isRu, ping) {
-            livePingMs = ping;
-            country = countryStr;
-            const badge = document.getElementById('badgeIp');
-            const detail = document.getElementById('detailIp');
-            const statusBox = document.getElementById('launchStatus');
-            const btnApp = document.getElementById('btnLaunchApp');
-
-            if (isRu || !vpnActive) {
-                isSafe = false;
-                badge.innerText = `Риск (${countryStr})`;
-                badge.className = "card-badge badge-danger";
-                detail.innerText = `Текущий IP: ${ipStr} (${countryStr}). VPN-адаптер: ${vpnActive ? 'ВКЛ' : 'ВЫКЛ'}. Запуск разрешен с предупреждением.`;
-                statusBox.innerText = `Внимание: обнаружен IP ${countryStr}. Запуск под вашу ответственность.`;
-                statusBox.className = "launch-status status-danger";
-                btnApp.className = "btn-launch-primary blocked";
-                btnApp.innerText = "Запустить Claude Mobile [Предупреждение]";
-                log(`[WARN] IP: ${countryStr}. Запуск с предупреждением.`);
-            } else {
-                isSafe = true;
-                badge.innerText = `${ipStr} (${countryStr})`;
-                badge.className = "card-badge badge-safe";
-                detail.innerText = `Внешний IP: ${ipStr} (${countryStr}). Трафик изолирован в VPN (${ping} мс).`;
-                statusBox.innerText = `Защита активна: безопасный запуск разрешен (${countryStr})`;
-                statusBox.className = "launch-status status-safe";
-                btnApp.className = "btn-launch-primary";
-                btnApp.innerText = "Запустить Claude Mobile";
-                log(`[OK] Туннель активен (${countryStr}, ${ping} мс). Доступ защищен.`);
-            }
-        };
-
-        // Старт проверки при загрузке
-        setTimeout(runAudit, 500);
-        setInterval(runAudit, 6000);
-    </script>
+  // Initial check
+  window.onload = function() {
+    if (window.AndroidBarrier) {
+      const vpn = window.AndroidBarrier.isVpnConnected();
+      updateStatusUI(vpn, 84, "Frankfurt, DE", false);
+      refreshLicenseUI();
+      refreshLogs();
+    }
+  };
+</script>
 </body>
 </html>

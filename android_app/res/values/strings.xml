@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Project XO</string>
+    <string name="app_name">ClaudeBarrier</string>
+    <string name="accessibility_service_desc">Автоматическая превентивная защита и мгновенный сброс приложения Claude при сбоях VPN.</string>
 </resources>

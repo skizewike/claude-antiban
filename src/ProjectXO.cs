@@ -1013,6 +1013,57 @@ namespace ProjectXO {
         [DllImport("user32.dll")]
         public static extern bool ReleaseCapture();
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr FindWindowEx(IntPtr parentHandle, IntPtr childAfter, string className, string windowTitle);
+
+        [DllImport("user32.dll")]
+        private static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RECT {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        public static void RefreshSystemTray() {
+            try {
+                IntPtr trayWnd = FindWindow("Shell_TrayWnd", null);
+                if (trayWnd != IntPtr.Zero) {
+                    IntPtr trayNotify = FindWindowEx(trayWnd, IntPtr.Zero, "TrayNotifyWnd", null);
+                    if (trayNotify != IntPtr.Zero) {
+                        IntPtr sysPager = FindWindowEx(trayNotify, IntPtr.Zero, "SysPager", null);
+                        IntPtr toolbar = (sysPager != IntPtr.Zero) 
+                            ? FindWindowEx(sysPager, IntPtr.Zero, "ToolbarWindow32", null)
+                            : FindWindowEx(trayNotify, IntPtr.Zero, "ToolbarWindow32", null);
+                        SweepToolbar(toolbar);
+                    }
+                }
+                IntPtr overflowWnd = FindWindow("NotifyIconOverflowWindow", null);
+                if (overflowWnd != IntPtr.Zero) {
+                    IntPtr overflowToolbar = FindWindowEx(overflowWnd, IntPtr.Zero, "ToolbarWindow32", null);
+                    SweepToolbar(overflowToolbar);
+                }
+            } catch {}
+        }
+
+        private static void SweepToolbar(IntPtr hToolbar) {
+            if (hToolbar == IntPtr.Zero) return;
+            RECT rect;
+            if (GetClientRect(hToolbar, out rect)) {
+                for (int x = 0; x < rect.Right; x += 8) {
+                    for (int y = 0; y < rect.Bottom; y += 8) {
+                        int lparam = (y << 16) | (x & 0xFFFF);
+                        SendMessage(hToolbar, 0x0200 /* WM_MOUSEMOVE */, 0, lparam);
+                    }
+                }
+            }
+        }
+
         private const int WM_NCLBUTTONDOWN = 0xA1;
         private const int HT_CAPTION = 0x2;
 
@@ -1184,6 +1235,8 @@ namespace ProjectXO {
                     if (_zapretProcess != null && !_zapretProcess.HasExited) {
                         _zapretProcess.Kill();
                     }
+                    // При полном выходе из барьера гасим Claude, чтобы не оставлять незащищенных сессий
+                    KillClaudeProcessesInMemory();
                 } catch {}
                 base.OnFormClosing(e);
             }
@@ -3803,6 +3856,8 @@ namespace ProjectXO {
                         }
                     } catch {}
                 }
+                // Принудительно очищаем системный трей от фантомных иконок
+                RefreshSystemTray();
             } catch {}
         }
 
