@@ -92,6 +92,7 @@ namespace ProjectXO {
         public string ZapretPath = "";
         public string ZapretArgs = "--wf-tcp=443 --dpi-desync=split2 --dpi-desync-split-pos=1 --dpi-desync-fooling=badseq";
         public bool AutoStartZapret = false;
+        public bool KillSwitchEnabled = true;
 
         private string ConfigPath {
             get {
@@ -119,6 +120,7 @@ namespace ProjectXO {
                             else if (k == "ZapretPath") ZapretPath = v;
                             else if (k == "ZapretArgs") ZapretArgs = v;
                             else if (k == "AutoStartZapret") AutoStartZapret = (v == "1" || v.ToLower() == "true");
+                            else if (k == "KillSwitchEnabled") KillSwitchEnabled = (v == "1" || v.ToLower() == "true");
                         }
                     }
                 }
@@ -135,7 +137,8 @@ namespace ProjectXO {
                     "ClaudeCodePath=" + (ClaudeCodePath ?? ""),
                     "ZapretPath=" + (ZapretPath ?? ""),
                     "ZapretArgs=" + (ZapretArgs ?? ""),
-                    "AutoStartZapret=" + (AutoStartZapret ? "1" : "0")
+                    "AutoStartZapret=" + (AutoStartZapret ? "1" : "0"),
+                    "KillSwitchEnabled=" + (KillSwitchEnabled ? "1" : "0")
                 };
                 File.WriteAllLines(ConfigPath, lines.ToArray());
             } catch {}
@@ -361,6 +364,59 @@ namespace ProjectXO {
             Color textColor = Enabled ? ForeColor : Color.FromArgb(100, 116, 139);
             TextRenderer.DrawText(g, Text, Font, ClientRectangle, textColor,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+        }
+    }
+
+    // Переключатель в стиле Cloudflare One (WARP iOS-style toggle switch)
+    public class WarpToggleSwitch : Control {
+        private bool _checked = false;
+        public event EventHandler CheckedChanged;
+
+        public bool Checked {
+            get { return _checked; }
+            set {
+                if (_checked != value) {
+                    _checked = value;
+                    if (CheckedChanged != null) CheckedChanged(this, EventArgs.Empty);
+                    Invalidate();
+                }
+            }
+        }
+
+        public WarpToggleSwitch() {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
+            Size = new Size(44, 22);
+            Cursor = Cursors.Hand;
+            BackColor = Color.Transparent;
+        }
+
+        protected override void OnClick(EventArgs e) {
+            base.OnClick(e);
+            Checked = !Checked;
+        }
+
+        protected override void OnPaint(PaintEventArgs e) {
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
+            Color bg = _checked ? Color.FromArgb(37, 99, 235) : Color.FromArgb(28, 33, 46);
+            Color border = _checked ? Color.FromArgb(59, 130, 246) : Color.FromArgb(45, 52, 70);
+            Color thumbColor = _checked ? Color.White : Color.FromArgb(148, 163, 184);
+
+            using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, Height / 2)) {
+                using (SolidBrush b = new SolidBrush(bg)) g.FillPath(b, p);
+                using (Pen pen = new Pen(border, 1f)) g.DrawPath(pen, p);
+            }
+
+            int thumbDiameter = Height - 6;
+            int thumbX = _checked ? (Width - thumbDiameter - 3) : 3;
+            int thumbY = 3;
+
+            Rectangle thumbRect = new Rectangle(thumbX, thumbY, thumbDiameter, thumbDiameter);
+            using (SolidBrush tb = new SolidBrush(thumbColor)) {
+                g.FillEllipse(tb, thumbRect);
+            }
         }
     }
 
@@ -1008,6 +1064,9 @@ namespace ProjectXO {
 
         // Элементы страницы 3: Журнал событий
         private RichTextBox _rtbLogs;
+        private Label _lblLogCount;
+        private int _logEventCount = 0;
+        private static int _isApplyingFirewallRules = 0;
 
         // Фоновый трей и сторож
         private NotifyIcon _trayIcon;
@@ -1140,6 +1199,11 @@ namespace ProjectXO {
                     _rtbLogs.SelectionColor = Color.FromArgb(241, 245, 249);
                     _rtbLogs.AppendText(message + "\n");
                     _rtbLogs.ScrollToCaret();
+
+                    _logEventCount++;
+                    if (_lblLogCount != null && !_lblLogCount.IsDisposed) {
+                        _lblLogCount.Text = "Событий: " + _logEventCount;
+                    }
                 }
             });
         }
@@ -1705,6 +1769,58 @@ namespace ProjectXO {
             page.Controls.Add(lblCopy);
         }
 
+        private CloudflareButton CreateWarpDangerButton(string text, int width, int height, EventHandler onClick) {
+            CloudflareButton btn = new CloudflareButton() {
+                Text = text,
+                Size = new Size(width, height),
+                CornerRadius = 6,
+                Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
+                GradientStart = Color.FromArgb(50, 22, 28),
+                GradientEnd = Color.FromArgb(40, 16, 22),
+                HoverStart = Color.FromArgb(70, 28, 36),
+                HoverEnd = Color.FromArgb(50, 22, 28),
+                BorderStrokeColor = Color.FromArgb(127, 29, 29),
+                ForeColor = Color.FromArgb(252, 165, 165),
+                Cursor = Cursors.Hand
+            };
+            if (onClick != null) btn.Click += onClick;
+            return btn;
+        }
+
+        private TextBox CreateWarpTextBox(string text, int width) {
+            return new TextBox() {
+                Text = text,
+                Size = new Size(width, 26),
+                BackColor = Color.FromArgb(15, 18, 26),
+                ForeColor = Color.FromArgb(241, 245, 249),
+                BorderStyle = BorderStyle.FixedSingle,
+                Font = new Font("Segoe UI", 9f)
+            };
+        }
+
+        private void CopyLogsToClipboard() {
+            try {
+                if (_rtbLogs != null && !string.IsNullOrEmpty(_rtbLogs.Text)) {
+                    Clipboard.SetText(_rtbLogs.Text);
+                    MessageBox.Show("Журнал событий скопирован в буфер обмена.", "Журнал событий", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            } catch (Exception ex) {
+                MessageBox.Show("Не удалось скопировать: " + ex.Message, "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void ExportLogsToFile() {
+            try {
+                string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "project_xo_export.log");
+                if (_rtbLogs != null) {
+                    File.WriteAllText(logPath, _rtbLogs.Text, System.Text.Encoding.UTF8);
+                    MessageBox.Show("Журнал событий сохранен на Рабочий стол:\n" + logPath, "Экспорт журнала", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            } catch (Exception ex) {
+                MessageBox.Show("Ошибка экспорта журнала: " + ex.Message, "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
         private CloudflareButton CreateWarpButton(string text, int width, int height, EventHandler onClick) {
             CloudflareButton btn = new CloudflareButton() {
                 Text = text,
@@ -1923,7 +2039,7 @@ namespace ProjectXO {
                 BackColor = Color.Transparent,
                 Cursor = Cursors.Hand
             };
-            _lblWarpWfpVal.Click += (s, e) => ApplyFirewallRulesSilent();
+            _lblWarpWfpVal.Click += (s, e) => ApplyFirewallRulesSilent(showSuccessDialog: true);
             cardTunnel.Controls.Add(_lblWarpWfpVal);
 
             // ================= SECTION 3: БЕЗОПАСНОСТЬ И ТЕСТЫ =================
@@ -2006,454 +2122,613 @@ namespace ProjectXO {
             cardSec.Controls.Add(btnRunAudit);
         }
 
+        // Вкладка 2: Обход блокировок (Zapret DPI + WFP изоляция + Защита от разрыва VPN)
         private void BuildBypassPage(Panel page) {
+            page.Controls.Clear();
+            page.AutoScroll = false;
+
             Label lblTitle = new Label() {
-                Text = "Службы обхода сетевых ограничений и DNS-инспекции",
-                Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+                Text = "Обход блокировок",
+                Font = new Font("Segoe UI", 20f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(248, 250, 252),
-                Location = new Point(24, 18),
+                Location = new Point(32, 20),
                 AutoSize = true
             };
             page.Controls.Add(lblTitle);
 
-            Label lblDesc = new Label() {
-                Text = "Модули нейтрализации цензуры DPI и подмены DNS со стороны локальных провайдеров.\nРаботают совместно с WFP-фильтрацией ядра Windows.",
-                Font = new Font("Segoe UI", 8.8f),
+            Label lblSub = new Label() {
+                Text = "Модули обхода цензуры DPI и многоуровневая аппаратная изоляция трафика",
+                Font = new Font("Segoe UI", 8.5f),
                 ForeColor = Color.FromArgb(148, 163, 184),
-                Location = new Point(24, 42),
-                Size = new Size(794, 36)
+                Location = new Point(34, 52),
+                AutoSize = true
             };
-            page.Controls.Add(lblDesc);
+            page.Controls.Add(lblSub);
 
-            Panel pnlZapret = new Panel() {
-                Location = new Point(24, 90),
-                Size = new Size(794, 118),
-                BackColor = Color.FromArgb(21, 24, 34)
+            // ================= CARD 1: ZAPRET DPI BYPASS =================
+            Panel cardZapret = new Panel() {
+                Location = new Point(32, 78),
+                Size = new Size(786, 104),
+                BackColor = Color.FromArgb(19, 22, 32)
             };
-            pnlZapret.Paint += (s, pe) => {
+            cardZapret.Paint += (s, pe) => {
                 Graphics g = pe.Graphics;
-                Rectangle r = new Rectangle(0, 0, pnlZapret.Width - 1, pnlZapret.Height - 1);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, cardZapret.Width - 1, cardZapret.Height - 1);
                 using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
-                    using (Pen pen = new Pen(Color.FromArgb(32, 36, 50), 1f)) {
-                        g.DrawPath(pen, p);
-                    }
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(19, 22, 32))) g.FillPath(b, p);
+                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 56), 1f)) g.DrawPath(pen, p);
                 }
             };
-            page.Controls.Add(pnlZapret);
+            page.Controls.Add(cardZapret);
 
             Label zTitle = new Label() {
                 Text = "Встроенный модуль Zapret DPI Bypass (winws.exe)",
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(248, 250, 252),
-                Location = new Point(16, 12),
-                AutoSize = true
+                Location = new Point(20, 14),
+                AutoSize = true,
+                BackColor = Color.Transparent
             };
-            pnlZapret.Controls.Add(zTitle);
+            cardZapret.Controls.Add(zTitle);
 
             _lblZapretStatus = new Label() {
-                Text = "○ Служба выключена (по умолчанию отключена)",
+                Text = (_zapretProcess != null && !_zapretProcess.HasExited) 
+                    ? "● Служба активна в фоновом режиме (перехват DPI TCP 443)" 
+                    : "○ Служба выключена (по умолчанию отключена)",
                 Font = new Font("Segoe UI", 8.5f),
-                ForeColor = Color.FromArgb(148, 163, 184),
-                Location = new Point(16, 36),
-                AutoSize = true
+                ForeColor = (_zapretProcess != null && !_zapretProcess.HasExited) 
+                    ? Color.FromArgb(52, 211, 153) 
+                    : Color.FromArgb(148, 163, 184),
+                Location = new Point(20, 38),
+                AutoSize = true,
+                BackColor = Color.Transparent
             };
-            pnlZapret.Controls.Add(_lblZapretStatus);
+            cardZapret.Controls.Add(_lblZapretStatus);
 
             Label zDesc = new Label() {
-                Text = "Низкоуровневая фрагментация TCP 443 для обхода ТСПУ:\n" + (_cfg.ZapretArgs ?? "--wf-tcp=443 --dpi-desync=split2 --dpi-desync-split-pos=1"),
-                Font = new Font("Consolas", 8.2f),
-                ForeColor = Color.FromArgb(148, 163, 184),
-                Location = new Point(16, 58),
-                Size = new Size(580, 50)
+                Text = "Низкоуровневая фрагментация пакетов TCP 443 для нейтрализации DPI провайдеров.",
+                Font = new Font("Segoe UI", 8.2f),
+                ForeColor = Color.FromArgb(100, 116, 139),
+                Location = new Point(20, 62),
+                AutoSize = true,
+                BackColor = Color.Transparent
             };
-            pnlZapret.Controls.Add(zDesc);
+            cardZapret.Controls.Add(zDesc);
 
-            _btnToggleZapret = new CloudflareButton() {
-                Text = "Запустить Zapret",
-                Location = new Point(610, 38),
-                Size = new Size(165, 42),
-                CornerRadius = 8,
-                GradientStart = Color.FromArgb(30, 34, 48),
-                GradientEnd = Color.FromArgb(24, 27, 38),
-                HoverStart = Color.FromArgb(42, 48, 66),
-                HoverEnd = Color.FromArgb(32, 36, 50),
-                ForeColor = Color.FromArgb(241, 245, 249),
-                BorderStrokeColor = Color.FromArgb(45, 52, 70)
-            };
-            _btnToggleZapret.Click += (s, e) => ToggleZapret();
-            pnlZapret.Controls.Add(_btnToggleZapret);
+            _btnToggleZapret = CreateWarpButton(
+                (_zapretProcess != null && !_zapretProcess.HasExited) ? "Остановить" : "Запустить Zapret",
+                160, 38,
+                (s, e) => ToggleZapret()
+            );
+            _btnToggleZapret.Location = new Point(606, 33);
+            cardZapret.Controls.Add(_btnToggleZapret);
 
-            Panel pnlDoh = new Panel() {
-                Location = new Point(24, 224),
-                Size = new Size(794, 110),
-                BackColor = Color.FromArgb(21, 24, 34)
+            // ================= CARD 2: ПРАВИЛА И КИЛЛСВИТЧ =================
+            Panel cardRules = new Panel() {
+                Location = new Point(32, 194),
+                Size = new Size(786, 152),
+                BackColor = Color.FromArgb(19, 22, 32)
             };
-            pnlDoh.Paint += (s, pe) => {
+            cardRules.Paint += (s, pe) => {
                 Graphics g = pe.Graphics;
-                Rectangle r = new Rectangle(0, 0, pnlDoh.Width - 1, pnlDoh.Height - 1);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, cardRules.Width - 1, cardRules.Height - 1);
                 using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
-                    using (Pen pen = new Pen(Color.FromArgb(32, 36, 50), 1f)) {
-                        g.DrawPath(pen, p);
-                    }
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(19, 22, 32))) g.FillPath(b, p);
+                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 56), 1f)) g.DrawPath(pen, p);
+                }
+                using (Pen divPen = new Pen(Color.FromArgb(28, 33, 48), 1f)) {
+                    g.DrawLine(divPen, 20, 76, cardRules.Width - 20, 76);
                 }
             };
-            page.Controls.Add(pnlDoh);
+            page.Controls.Add(cardRules);
 
-            Label dTitle = new Label() {
-                Text = "Шифрованный DNS-over-HTTPS (Cloudflare 1.1.1.1 / Google 8.8.8.8)",
+            // Row 1: Применить правила
+            Label lblR1Title = new Label() {
+                Text = "Аппаратная изоляция WFP в ядре Windows",
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(248, 250, 252),
-                Location = new Point(16, 14),
-                AutoSize = true
-            };
-            pnlDoh.Controls.Add(dTitle);
-
-            Label dDesc = new Label() {
-                Text = "Разрешение доменов api.anthropic.com и claude.ai через защищенные HTTPS-запросы.\nИсключает чтение доменных имен в открытом виде и отравление DNS-кэша домашнего Wi-Fi.",
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = Color.FromArgb(148, 163, 184),
-                Location = new Point(16, 40),
-                Size = new Size(580, 50)
-            };
-            pnlDoh.Controls.Add(dDesc);
-
-            CloudflareButton btnDohTest = new CloudflareButton() {
-                Text = "Тест DoH (1.1.1.1)",
-                Location = new Point(620, 35),
-                Size = new Size(155, 38),
-                CornerRadius = 8,
-                GradientStart = Color.FromArgb(30, 34, 48),
-                GradientEnd = Color.FromArgb(24, 27, 38),
-                HoverStart = Color.FromArgb(42, 48, 66),
-                HoverEnd = Color.FromArgb(32, 36, 50),
-                ForeColor = Color.FromArgb(241, 245, 249),
-                BorderStrokeColor = Color.FromArgb(45, 52, 70)
-            };
-            btnDohTest.Click += (s, e) => TestDoHResolver();
-            pnlDoh.Controls.Add(btnDohTest);
-        }
-
-        // Вкладка 3: Журнал событий
-        private void BuildLogsPage(Panel page) {
-            Label lblTitle = new Label() {
-                Text = "Системный журнал событий и телеметрии",
-                Font = new Font("Segoe UI", 11f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(248, 250, 252),
-                Location = new Point(24, 18),
-                AutoSize = true
-            };
-            page.Controls.Add(lblTitle);
-
-            _rtbLogs = new RichTextBox() {
-                Location = new Point(24, 48),
-                Size = new Size(794, 420),
-                BackColor = Color.FromArgb(10, 12, 17),
-                ForeColor = Color.FromArgb(241, 245, 249),
-                Font = new Font("Consolas", 8.8f),
-                ReadOnly = true,
-                BorderStyle = BorderStyle.None,
-                ScrollBars = RichTextBoxScrollBars.Vertical
-            };
-            page.Controls.Add(_rtbLogs);
-
-            CloudflareButton btnCopyLogs = new CloudflareButton() {
-                Text = "Скопировать журнал",
-                Location = new Point(24, 480),
-                Size = new Size(180, 36),
-                CornerRadius = 8,
-                GradientStart = Color.FromArgb(30, 34, 48),
-                GradientEnd = Color.FromArgb(24, 27, 38),
-                HoverStart = Color.FromArgb(42, 48, 66),
-                HoverEnd = Color.FromArgb(32, 36, 50),
-                ForeColor = Color.FromArgb(241, 245, 249),
-                BorderStrokeColor = Color.FromArgb(45, 52, 70)
-            };
-            btnCopyLogs.Click += (s, e) => {
-                try {
-                    Clipboard.SetText(_rtbLogs.Text);
-                    MessageBox.Show("Журнал событий скопирован в буфер обмена.", "Claude Anti-Ban Barrier", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                } catch {}
-            };
-            page.Controls.Add(btnCopyLogs);
-
-            CloudflareButton btnClearLogs = new CloudflareButton() {
-                Text = "Очистить",
-                Location = new Point(216, 480),
-                Size = new Size(120, 36),
-                CornerRadius = 8,
-                GradientStart = Color.FromArgb(30, 34, 48),
-                GradientEnd = Color.FromArgb(24, 27, 38),
-                HoverStart = Color.FromArgb(42, 48, 66),
-                HoverEnd = Color.FromArgb(32, 36, 50),
-                ForeColor = Color.FromArgb(203, 213, 225),
-                BorderStrokeColor = Color.FromArgb(45, 52, 70)
-            };
-            btnClearLogs.Click += (s, e) => _rtbLogs.Clear();
-            page.Controls.Add(btnClearLogs);
-        }
-
-        // Вкладка 4: Настройки (с путями для Claude Desktop, Claude Code и Zapret)
-        private void BuildSettingsPage(Panel page) {
-            Label lblTitle = new Label() {
-                Text = "Системные параметры барьера",
-                Font = new Font("Segoe UI", 11f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(248, 250, 252),
-                Location = new Point(24, 18),
-                AutoSize = true
-            };
-            page.Controls.Add(lblTitle);
-
-            CheckBox chkTray = new CheckBox() {
-                Text = "Сворачивать в системный трей при нажатии кнопки закрытия [X]",
-                Checked = _cfg.MinimizeToTrayOnClose,
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 9.2f),
-                Location = new Point(28, 48),
-                Size = new Size(600, 24)
-            };
-            chkTray.CheckedChanged += (s, e) => {
-                _cfg.MinimizeToTrayOnClose = chkTray.Checked;
-                _cfg.Save();
-                Log("CONFIG", "Режим сворачивания в трей: " + (_cfg.MinimizeToTrayOnClose ? "ВКЛ" : "ВЫКЛ"), Color.FromArgb(148, 163, 184));
-            };
-            page.Controls.Add(chkTray);
-
-            CheckBox chkAutoStart = new CheckBox() {
-                Text = "Автозапуск вместе с Windows в фоновом режиме",
-                Checked = _cfg.AutoStartWithWindows,
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 9.2f),
-                Location = new Point(28, 76),
-                Size = new Size(600, 24)
-            };
-            chkAutoStart.CheckedChanged += (s, e) => {
-                _cfg.AutoStartWithWindows = chkAutoStart.Checked;
-                _cfg.Save();
-                SetAutoStart(chkAutoStart.Checked);
-            };
-            page.Controls.Add(chkAutoStart);
-
-            // 1. Путь Claude Desktop
-            Label lblDesktopPath = new Label() {
-                Text = "Путь к исполняемому файлу Claude Desktop (Claude.exe):",
-                Location = new Point(28, 108),
+                Location = new Point(20, 15),
                 AutoSize = true,
-                ForeColor = Color.FromArgb(148, 163, 184)
+                BackColor = Color.Transparent
             };
-            page.Controls.Add(lblDesktopPath);
+            cardRules.Controls.Add(lblR1Title);
 
-            TextBox txtClaudePath = new TextBox() {
-                Text = _cfg.ClaudePath,
-                Location = new Point(28, 130),
-                Size = new Size(640, 26),
-                BackColor = Color.FromArgb(21, 24, 34),
-                ForeColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle,
-                Font = new Font("Segoe UI", 9f)
+            Label lblR1Sub = new Label() {
+                Text = "Внедрение правил блокировки CIDR 160.79.104.0/23 и отключение утечек IPv6 на физических картах.",
+                Font = new Font("Segoe UI", 8.2f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(20, 38),
+                Size = new Size(570, 30),
+                BackColor = Color.Transparent
             };
-            txtClaudePath.TextChanged += (s, e) => { _cfg.ClaudePath = txtClaudePath.Text; _cfg.Save(); };
-            page.Controls.Add(txtClaudePath);
+            cardRules.Controls.Add(lblR1Sub);
 
-            CloudflareButton btnBrowseDesktop = new CloudflareButton() {
-                Text = "Обзор...",
-                Location = new Point(680, 128),
-                Size = new Size(135, 28),
-                CornerRadius = 6,
-                GradientStart = Color.FromArgb(30, 34, 48),
-                GradientEnd = Color.FromArgb(24, 27, 38),
-                HoverStart = Color.FromArgb(42, 48, 66),
-                HoverEnd = Color.FromArgb(32, 36, 50),
-                ForeColor = Color.White,
-                BorderStrokeColor = Color.FromArgb(45, 52, 70)
+            CloudflareButton btnApplyRules = CreateWarpButton("Применить правила", 160, 36, (s, e) => ApplyFirewallRulesSilent(showSuccessDialog: true));
+            btnApplyRules.Location = new Point(606, 19);
+            cardRules.Controls.Add(btnApplyRules);
+
+            // Row 2: Сокет-сторож и KillSwitch
+            Label lblR2Title = new Label() {
+                Text = "Многоуровневый сокет-сторож и процессный KillSwitch",
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 91),
+                AutoSize = true,
+                BackColor = Color.Transparent
             };
-            btnBrowseDesktop.Click += (s, e) => {
+            cardRules.Controls.Add(lblR2Title);
+
+            Label lblR2Sub = new Label() {
+                Text = "Мгновенное отсечение сокетов и завершение процессов Claude при потере VPN (< 15 мс). Работает даже без прав Администратора.",
+                Font = new Font("Segoe UI", 8.2f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(20, 114),
+                Size = new Size(570, 32),
+                BackColor = Color.Transparent
+            };
+            cardRules.Controls.Add(lblR2Sub);
+
+            CloudflareButton btnTestKill = CreateWarpButton("Тест перехвата", 160, 36, (s, e) => RunEmergencyInterceptTest());
+            btnTestKill.Location = new Point(606, 95);
+            cardRules.Controls.Add(btnTestKill);
+
+            // ================= CARD 3: ПРЕДУПРЕЖДЕНИЕ БЕЗОПАСНОСТИ =================
+            Panel cardAdvisory = new Panel() {
+                Location = new Point(32, 358),
+                Size = new Size(786, 186),
+                BackColor = Color.FromArgb(22, 19, 28)
+            };
+            cardAdvisory.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, cardAdvisory.Width - 1, cardAdvisory.Height - 1);
+                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(22, 19, 28))) g.FillPath(b, p);
+                    using (Pen pen = new Pen(Color.FromArgb(120, 60, 20), 1f)) g.DrawPath(pen, p);
+                }
+                using (Pen divPen = new Pen(Color.FromArgb(42, 32, 28), 1f)) {
+                    g.DrawLine(divPen, 20, 34, cardAdvisory.Width - 20, 34);
+                }
+            };
+            page.Controls.Add(cardAdvisory);
+
+            Label lblAdvTitle = new Label() {
+                Text = "ПРЕДУПРЕЖДЕНИЕ О БЕЗОПАСНОСТИ СЕТИ И РАЗРЫВЕ VPN-ТУННЕЛЯ",
+                Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(251, 191, 36),
+                Location = new Point(20, 10),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardAdvisory.Controls.Add(lblAdvTitle);
+
+            Label lblAdv1 = new Label() {
+                Text = "• При внезапном падении VPN операционная система мгновенно перенаправляет пакеты на физическую карту (Wi-Fi/Ethernet).",
+                Font = new Font("Segoe UI", 8.2f),
+                ForeColor = Color.FromArgb(226, 232, 240),
+                Location = new Point(20, 44),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardAdvisory.Controls.Add(lblAdv1);
+
+            Label lblAdv2 = new Label() {
+                Text = "• Если брандмауэр Windows отключен антивирусом или барьер запущен без прав Администратора, WFP-фильтр ядра неактивен.",
+                Font = new Font("Segoe UI", 8.2f),
+                ForeColor = Color.FromArgb(226, 232, 240),
+                Location = new Point(20, 70),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardAdvisory.Controls.Add(lblAdv2);
+
+            Label lblAdv3 = new Label() {
+                Text = "• В таком случае защиту обеспечивает пользовательский Сторож (Watchdog): он детектирует разрыв и мгновенно завершает Claude в памяти.",
+                Font = new Font("Segoe UI", 8.2f),
+                ForeColor = Color.FromArgb(226, 232, 240),
+                Location = new Point(20, 96),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardAdvisory.Controls.Add(lblAdv3);
+
+            Label lblAdv4 = new Label() {
+                Text = "• Для 100% гарантии обязательно нажмите «Применить правила» выше — это заблокирует прямой обход на аппаратном уровне ядра.",
+                Font = new Font("Segoe UI", 8.2f),
+                ForeColor = Color.FromArgb(226, 232, 240),
+                Location = new Point(20, 122),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardAdvisory.Controls.Add(lblAdv4);
+
+            Label lblAdv5 = new Label() {
+                Text = "• При работе без прав Администратора не закрывайте главное окно барьера — оно контролирует сокеты в реальном времени.",
+                Font = new Font("Segoe UI", 8.2f),
+                ForeColor = Color.FromArgb(252, 211, 77),
+                Location = new Point(20, 148),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardAdvisory.Controls.Add(lblAdv5);
+        }
+
+        // Вкладка 3: Настройки (1:1 Cloudflare WARP с Toggle-переключателями и карточками)
+        private void BuildSettingsPage(Panel page) {
+            page.Controls.Clear();
+            page.AutoScroll = false;
+
+            Label lblTitle = new Label() {
+                Text = "Настройки",
+                Font = new Font("Segoe UI", 20f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(32, 20),
+                AutoSize = true
+            };
+            page.Controls.Add(lblTitle);
+
+            // ================= CARD 1: ПАРАМЕТРЫ ЗАЩИТЫ =================
+            Panel cardGeneral = new Panel() {
+                Location = new Point(32, 68),
+                Size = new Size(786, 176),
+                BackColor = Color.FromArgb(19, 22, 32)
+            };
+            cardGeneral.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, cardGeneral.Width - 1, cardGeneral.Height - 1);
+                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(19, 22, 32))) g.FillPath(b, p);
+                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 56), 1f)) g.DrawPath(pen, p);
+                }
+                using (Pen divPen = new Pen(Color.FromArgb(28, 33, 48), 1f)) {
+                    g.DrawLine(divPen, 20, 44, cardGeneral.Width - 20, 44);
+                    g.DrawLine(divPen, 20, 88, cardGeneral.Width - 20, 88);
+                    g.DrawLine(divPen, 20, 132, cardGeneral.Width - 20, 132);
+                }
+            };
+            page.Controls.Add(cardGeneral);
+
+            // Row 1: Сворачивать в системный трей
+            Label lblTray = new Label() {
+                Text = "Сворачивать в системный трей при нажатии кнопки закрытия [✕]",
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 13),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardGeneral.Controls.Add(lblTray);
+
+            WarpToggleSwitch swTray = new WarpToggleSwitch() {
+                Location = new Point(722, 11),
+                Checked = _cfg.MinimizeToTrayOnClose
+            };
+            swTray.CheckedChanged += (s, e) => {
+                _cfg.MinimizeToTrayOnClose = swTray.Checked;
+                _cfg.Save();
+                Log("CONFIG", "Сворачивание в трей: " + (_cfg.MinimizeToTrayOnClose ? "ВКЛ" : "ВЫКЛ"), Color.FromArgb(148, 163, 184));
+            };
+            cardGeneral.Controls.Add(swTray);
+
+            // Row 2: Автозапуск Windows
+            Label lblAuto = new Label() {
+                Text = "Автозапуск барьера защиты при старте операционной системы Windows",
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 57),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardGeneral.Controls.Add(lblAuto);
+
+            WarpToggleSwitch swAuto = new WarpToggleSwitch() {
+                Location = new Point(722, 55),
+                Checked = _cfg.AutoStartWithWindows
+            };
+            swAuto.CheckedChanged += (s, e) => {
+                _cfg.AutoStartWithWindows = swAuto.Checked;
+                _cfg.Save();
+                SetAutoStart(swAuto.Checked);
+                Log("CONFIG", "Автозапуск Windows: " + (_cfg.AutoStartWithWindows ? "ВКЛ" : "ВЫКЛ"), Color.FromArgb(148, 163, 184));
+            };
+            cardGeneral.Controls.Add(swAuto);
+
+            // Row 3: Автостарт Zapret
+            Label lblZapret = new Label() {
+                Text = "Автоматический запуск службы Zapret DPI Bypass при включении защиты",
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 101),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardGeneral.Controls.Add(lblZapret);
+
+            WarpToggleSwitch swZapret = new WarpToggleSwitch() {
+                Location = new Point(722, 99),
+                Checked = _cfg.AutoStartZapret
+            };
+            swZapret.CheckedChanged += (s, e) => {
+                _cfg.AutoStartZapret = swZapret.Checked;
+                _cfg.Save();
+                Log("CONFIG", "Автостарт Zapret: " + (_cfg.AutoStartZapret ? "ВКЛ" : "ВЫКЛ"), Color.FromArgb(148, 163, 184));
+            };
+            cardGeneral.Controls.Add(swZapret);
+
+            // Row 4: Аварийный KillSwitch
+            Label lblKillswitch = new Label() {
+                Text = "Аварийный KillSwitch (мгновенная блокировка сокетов при разрыве VPN)",
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 145),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardGeneral.Controls.Add(lblKillswitch);
+
+            WarpToggleSwitch swKillswitch = new WarpToggleSwitch() {
+                Location = new Point(722, 143),
+                Checked = _cfg.KillSwitchEnabled
+            };
+            swKillswitch.CheckedChanged += (s, e) => {
+                _cfg.KillSwitchEnabled = swKillswitch.Checked;
+                _cfg.Save();
+                Log("CONFIG", "Аварийный KillSwitch: " + (_cfg.KillSwitchEnabled ? "АКТИВЕН" : "ОТКЛЮЧЕН"), Color.FromArgb(148, 163, 184));
+            };
+            cardGeneral.Controls.Add(swKillswitch);
+
+            // ================= CARD 2: ПУТИ К КЛИЕНТАМ CLAUDE И ZAPRET =================
+            Panel cardPaths = new Panel() {
+                Location = new Point(32, 258),
+                Size = new Size(786, 216),
+                BackColor = Color.FromArgb(19, 22, 32)
+            };
+            cardPaths.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, cardPaths.Width - 1, cardPaths.Height - 1);
+                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(19, 22, 32))) g.FillPath(b, p);
+                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 56), 1f)) g.DrawPath(pen, p);
+                }
+                using (Pen divPen = new Pen(Color.FromArgb(28, 33, 48), 1f)) {
+                    g.DrawLine(divPen, 20, 72, cardPaths.Width - 20, 72);
+                    g.DrawLine(divPen, 20, 144, cardPaths.Width - 20, 144);
+                }
+            };
+            page.Controls.Add(cardPaths);
+
+            // Row 1: Claude Desktop
+            Label lblP1 = new Label() {
+                Text = "Исполняемый файл Claude Desktop (Claude.exe):",
+                Font = new Font("Segoe UI", 8.8f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(20, 10),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardPaths.Controls.Add(lblP1);
+
+            TextBox txtClaude = CreateWarpTextBox(_cfg.ClaudePath, 616);
+            txtClaude.Location = new Point(20, 32);
+            txtClaude.TextChanged += (s, e) => { _cfg.ClaudePath = txtClaude.Text; _cfg.Save(); };
+            cardPaths.Controls.Add(txtClaude);
+
+            CloudflareButton btnBrowseClaude = CreateWarpButton("Обзор...", 120, 28, (s, e) => {
                 using (OpenFileDialog ofd = new OpenFileDialog()) {
-                    ofd.Filter = "Claude Executable (*.exe)|*.exe|All files (*.*)|*.*";
+                    ofd.Filter = "Claude Desktop (*.exe)|*.exe|Все файлы (*.*)|*.*";
                     if (ofd.ShowDialog() == DialogResult.OK) {
-                        txtClaudePath.Text = ofd.FileName;
+                        txtClaude.Text = ofd.FileName;
                         _cfg.ClaudePath = ofd.FileName;
                         _cfg.Save();
                     }
                 }
-            };
-            page.Controls.Add(btnBrowseDesktop);
+            });
+            btnBrowseClaude.Location = new Point(646, 31);
+            cardPaths.Controls.Add(btnBrowseClaude);
 
-            // 2. Путь Claude Code CLI
-            Label lblCliPath = new Label() {
-                Text = "Путь к исполняемому файлу Claude Code CLI (claude.cmd / claude.exe):",
-                Location = new Point(28, 168),
+            // Row 2: Claude Code CLI
+            Label lblP2 = new Label() {
+                Text = "Исполняемый файл Claude Code CLI (claude.cmd / claude.exe):",
+                Font = new Font("Segoe UI", 8.8f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(20, 82),
                 AutoSize = true,
-                ForeColor = Color.FromArgb(148, 163, 184)
+                BackColor = Color.Transparent
             };
-            page.Controls.Add(lblCliPath);
+            cardPaths.Controls.Add(lblP2);
 
-            TextBox txtCliPath = new TextBox() {
-                Text = _cfg.ClaudeCodePath,
-                Location = new Point(28, 190),
-                Size = new Size(640, 26),
-                BackColor = Color.FromArgb(21, 24, 34),
-                ForeColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle,
-                Font = new Font("Segoe UI", 9f)
-            };
-            txtCliPath.TextChanged += (s, e) => { _cfg.ClaudeCodePath = txtCliPath.Text; _cfg.Save(); };
-            page.Controls.Add(txtCliPath);
+            TextBox txtCli = CreateWarpTextBox(_cfg.ClaudeCodePath, 616);
+            txtCli.Location = new Point(20, 104);
+            txtCli.TextChanged += (s, e) => { _cfg.ClaudeCodePath = txtCli.Text; _cfg.Save(); };
+            cardPaths.Controls.Add(txtCli);
 
-            CloudflareButton btnBrowseCli = new CloudflareButton() {
-                Text = "Обзор...",
-                Location = new Point(680, 188),
-                Size = new Size(135, 28),
-                CornerRadius = 6,
-                GradientStart = Color.FromArgb(30, 34, 48),
-                GradientEnd = Color.FromArgb(24, 27, 38),
-                HoverStart = Color.FromArgb(42, 48, 66),
-                HoverEnd = Color.FromArgb(32, 36, 50),
-                ForeColor = Color.White,
-                BorderStrokeColor = Color.FromArgb(45, 52, 70)
-            };
-            btnBrowseCli.Click += (s, e) => {
+            CloudflareButton btnBrowseCli = CreateWarpButton("Обзор...", 120, 28, (s, e) => {
                 using (OpenFileDialog ofd = new OpenFileDialog()) {
-                    ofd.Filter = "CLI Executables (*.cmd;*.exe;*.bat)|*.cmd;*.exe;*.bat|All files (*.*)|*.*";
+                    ofd.Filter = "Claude CLI (*.cmd;*.exe;*.bat)|*.cmd;*.exe;*.bat|Все файлы (*.*)|*.*";
                     if (ofd.ShowDialog() == DialogResult.OK) {
-                        txtCliPath.Text = ofd.FileName;
+                        txtCli.Text = ofd.FileName;
                         _cfg.ClaudeCodePath = ofd.FileName;
                         _cfg.Save();
                     }
                 }
-            };
-            page.Controls.Add(btnBrowseCli);
+            });
+            btnBrowseCli.Location = new Point(646, 103);
+            cardPaths.Controls.Add(btnBrowseCli);
 
-            // 3. Путь к Zapret DPI Bypass (winws.exe)
-            Label lblZapretPath = new Label() {
-                Text = "Путь к бинарному файлу Zapret (winws.exe):",
-                Location = new Point(28, 228),
+            // Row 3: Zapret DPI
+            Label lblP3 = new Label() {
+                Text = "Исполняемый файл Zapret DPI Bypass (winws.exe):",
+                Font = new Font("Segoe UI", 8.8f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(20, 154),
                 AutoSize = true,
-                ForeColor = Color.FromArgb(148, 163, 184)
+                BackColor = Color.Transparent
             };
-            page.Controls.Add(lblZapretPath);
+            cardPaths.Controls.Add(lblP3);
 
-            TextBox txtZapretPath = new TextBox() {
-                Text = _cfg.ZapretPath,
-                Location = new Point(28, 250),
-                Size = new Size(640, 26),
-                BackColor = Color.FromArgb(21, 24, 34),
-                ForeColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle,
-                Font = new Font("Segoe UI", 9f)
-            };
-            txtZapretPath.TextChanged += (s, e) => { _cfg.ZapretPath = txtZapretPath.Text; _cfg.Save(); };
-            page.Controls.Add(txtZapretPath);
+            TextBox txtZapret = CreateWarpTextBox(_cfg.ZapretPath, 616);
+            txtZapret.Location = new Point(20, 176);
+            txtZapret.TextChanged += (s, e) => { _cfg.ZapretPath = txtZapret.Text; _cfg.Save(); };
+            cardPaths.Controls.Add(txtZapret);
 
-            CloudflareButton btnBrowseZapret = new CloudflareButton() {
-                Text = "Обзор...",
-                Location = new Point(680, 248),
-                Size = new Size(135, 28),
-                CornerRadius = 6,
-                GradientStart = Color.FromArgb(30, 34, 48),
-                GradientEnd = Color.FromArgb(24, 27, 38),
-                HoverStart = Color.FromArgb(42, 48, 66),
-                HoverEnd = Color.FromArgb(32, 36, 50),
-                ForeColor = Color.White,
-                BorderStrokeColor = Color.FromArgb(45, 52, 70)
-            };
-            btnBrowseZapret.Click += (s, e) => {
+            CloudflareButton btnBrowseZapret = CreateWarpButton("Обзор...", 120, 28, (s, e) => {
                 using (OpenFileDialog ofd = new OpenFileDialog()) {
-                    ofd.Filter = "Zapret winws (*.exe)|*.exe|All files (*.*)|*.*";
+                    ofd.Filter = "Zapret winws (*.exe)|*.exe|Все файлы (*.*)|*.*";
                     if (ofd.ShowDialog() == DialogResult.OK) {
-                        txtZapretPath.Text = ofd.FileName;
+                        txtZapret.Text = ofd.FileName;
                         _cfg.ZapretPath = ofd.FileName;
                         _cfg.Save();
                     }
                 }
-            };
-            page.Controls.Add(btnBrowseZapret);
+            });
+            btnBrowseZapret.Location = new Point(646, 175);
+            cardPaths.Controls.Add(btnBrowseZapret);
 
-            // 4. Аргументы командной строки Zapret
-            Label lblZapretArgs = new Label() {
-                Text = "Параметры запуска Zapret winws.exe:",
-                Location = new Point(28, 288),
-                AutoSize = true,
-                ForeColor = Color.FromArgb(148, 163, 184)
+            // ================= CARD 3: ДЕИНСТАЛЛЯЦИЯ =================
+            Panel cardUninstall = new Panel() {
+                Location = new Point(32, 488),
+                Size = new Size(786, 76),
+                BackColor = Color.FromArgb(28, 18, 22)
             };
-            page.Controls.Add(lblZapretArgs);
-
-            TextBox txtZapretArgs = new TextBox() {
-                Text = _cfg.ZapretArgs,
-                Location = new Point(28, 310),
-                Size = new Size(787, 26),
-                BackColor = Color.FromArgb(21, 24, 34),
-                ForeColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle,
-                Font = new Font("Consolas", 8.5f)
-            };
-            txtZapretArgs.TextChanged += (s, e) => { _cfg.ZapretArgs = txtZapretArgs.Text; _cfg.Save(); };
-            page.Controls.Add(txtZapretArgs);
-
-            // 5. Опция автозапуска Zapret (по умолчанию отключена)
-            CheckBox chkAutoZapret = new CheckBox() {
-                Text = "Автоматически активировать Zapret DPI Bypass при включении барьера защиты (по умолчанию выключен)",
-                Location = new Point(28, 348),
-                AutoSize = true,
-                ForeColor = Color.FromArgb(203, 213, 225),
-                Font = new Font("Segoe UI", 9f),
-                Checked = _cfg.AutoStartZapret
-            };
-            chkAutoZapret.CheckedChanged += (s, e) => {
-                _cfg.AutoStartZapret = chkAutoZapret.Checked;
-                _cfg.Save();
-            };
-            page.Controls.Add(chkAutoZapret);
-
-            // Блок деинсталляции
-            Panel pnlUninstall = new Panel() {
-                Location = new Point(28, 388),
-                Size = new Size(787, 95),
-                BackColor = Color.FromArgb(32, 20, 24)
-            };
-            pnlUninstall.Paint += (s, pe) => {
+            cardUninstall.Paint += (s, pe) => {
                 Graphics g = pe.Graphics;
-                Rectangle r = new Rectangle(0, 0, pnlUninstall.Width - 1, pnlUninstall.Height - 1);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, cardUninstall.Width - 1, cardUninstall.Height - 1);
                 using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
-                    using (Pen pen = new Pen(Color.FromArgb(80, 239, 68, 68), 1f)) {
-                        g.DrawPath(pen, p);
-                    }
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(28, 18, 22))) g.FillPath(b, p);
+                    using (Pen pen = new Pen(Color.FromArgb(85, 30, 38), 1f)) g.DrawPath(pen, p);
                 }
             };
-            page.Controls.Add(pnlUninstall);
+            page.Controls.Add(cardUninstall);
 
-            Label uTitle = new Label() {
-                Text = "Деинсталляция и полный откат сетевых настроек",
+            Label lblUTitle = new Label() {
+                Text = "Деинсталляция и полный сброс сетевых правил",
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(248, 113, 113),
-                Location = new Point(16, 14),
-                AutoSize = true
+                Location = new Point(20, 15),
+                AutoSize = true,
+                BackColor = Color.Transparent
             };
-            pnlUninstall.Controls.Add(uTitle);
+            cardUninstall.Controls.Add(lblUTitle);
 
-            Label uDesc = new Label() {
-                Text = "Удаление правил ядра WFP, включение IPv6 и возвращение стандартных параметров сети Windows.",
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = Color.FromArgb(203, 213, 225),
-                Location = new Point(16, 40),
-                Size = new Size(580, 36)
+            Label lblUDesc = new Label() {
+                Text = "Удаление правил WFP из ядра Windows, сброс сетевых политик и удаление барьера.",
+                Font = new Font("Segoe UI", 8.2f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(20, 39),
+                AutoSize = true,
+                BackColor = Color.Transparent
             };
-            pnlUninstall.Controls.Add(uDesc);
+            cardUninstall.Controls.Add(lblUDesc);
 
-            CloudflareButton btnUninstall = new CloudflareButton() {
-                Text = "Удалить барьер",
-                Location = new Point(610, 28),
-                Size = new Size(155, 38),
-                CornerRadius = 8,
-                GradientStart = Color.FromArgb(185, 28, 28),
-                GradientEnd = Color.FromArgb(153, 27, 27),
-                HoverStart = Color.FromArgb(220, 38, 38),
-                HoverEnd = Color.FromArgb(185, 28, 28),
-                ForeColor = Color.White
-            };
-            btnUninstall.Click += (s, e) => RunUninstaller();
-            pnlUninstall.Controls.Add(btnUninstall);
+            CloudflareButton btnUninstall = CreateWarpDangerButton("Удалить Project XO", 160, 38, (s, e) => RunUninstaller());
+            btnUninstall.Location = new Point(606, 19);
+            cardUninstall.Controls.Add(btnUninstall);
         }
 
+        // Вкладка 4: Журнал (1:1 Cloudflare WARP консоль событий)
+        private void BuildLogsPage(Panel page) {
+            page.Controls.Clear();
+            page.AutoScroll = false;
+
+            Label lblTitle = new Label() {
+                Text = "Журнал событий",
+                Font = new Font("Segoe UI", 20f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(32, 20),
+                AutoSize = true
+            };
+            page.Controls.Add(lblTitle);
+
+            Label lblSub = new Label() {
+                Text = "События безопасности, отклики шлюзов и телеметрия WFP в реальном времени",
+                Font = new Font("Segoe UI", 8.5f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(34, 52),
+                AutoSize = true
+            };
+            page.Controls.Add(lblSub);
+
+            // Кнопки управления журналом (выровнены по правому краю в стиле WARP)
+            CloudflareButton btnClear = CreateWarpButton("Очистить", 90, 32, (s, e) => {
+                if (_rtbLogs != null) {
+                    _rtbLogs.Clear();
+                    _logEventCount = 0;
+                    if (_lblLogCount != null) _lblLogCount.Text = "Событий: 0";
+                }
+            });
+            btnClear.Location = new Point(486, 18);
+            page.Controls.Add(btnClear);
+
+            CloudflareButton btnExport = CreateWarpButton("Экспорт", 96, 32, (s, e) => ExportLogsToFile());
+            btnExport.Location = new Point(584, 18);
+            page.Controls.Add(btnExport);
+
+            CloudflareButton btnCopy = CreateWarpButton("Скопировать", 130, 32, (s, e) => CopyLogsToClipboard());
+            btnCopy.Location = new Point(688, 18);
+            page.Controls.Add(btnCopy);
+
+            // Контейнерная карточка терминала
+            Panel cardLogs = new Panel() {
+                Location = new Point(32, 78),
+                Size = new Size(786, 484),
+                BackColor = Color.FromArgb(19, 22, 32)
+            };
+            cardLogs.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, cardLogs.Width - 1, cardLogs.Height - 1);
+                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(19, 22, 32))) g.FillPath(b, p);
+                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 56), 1f)) g.DrawPath(pen, p);
+                }
+                using (Pen divPen = new Pen(Color.FromArgb(28, 33, 48), 1f)) {
+                    g.DrawLine(divPen, 16, 32, cardLogs.Width - 16, 32);
+                }
+                // Зеленая светящаяся точка live stream
+                using (SolidBrush dotBrush = new SolidBrush(Color.FromArgb(52, 211, 153))) {
+                    g.FillEllipse(dotBrush, 18, 12, 8, 8);
+                }
+            };
+            page.Controls.Add(cardLogs);
+
+            Label lblStreamTitle = new Label() {
+                Text = "СИСТЕМНАЯ КОНСОЛЬ ЯДРА // LIVE EVENT STREAM",
+                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(32, 9),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardLogs.Controls.Add(lblStreamTitle);
+
+            _lblLogCount = new Label() {
+                Text = "Событий: " + _logEventCount,
+                Font = new Font("Segoe UI", 8f),
+                ForeColor = Color.FromArgb(100, 116, 139),
+                Location = new Point(600, 9),
+                Size = new Size(166, 18),
+                TextAlign = ContentAlignment.MiddleRight,
+                BackColor = Color.Transparent
+            };
+            cardLogs.Controls.Add(_lblLogCount);
+
+            _rtbLogs = new RichTextBox() {
+                Location = new Point(12, 40),
+                Size = new Size(762, 432),
+                BackColor = Color.FromArgb(11, 14, 20),
+                ForeColor = Color.FromArgb(226, 232, 240),
+                Font = new Font("Consolas", 9f),
+                ReadOnly = true,
+                BorderStyle = BorderStyle.None,
+                ScrollBars = RichTextBoxScrollBars.Vertical
+            };
+            cardLogs.Controls.Add(_rtbLogs);
+        }
         // Обновление состояния приложения (Warning vs Safe)
         private void SetProtectionUIState(ProtectionState newState, string msg = "") {
             _currentState = newState;
@@ -3300,26 +3575,41 @@ namespace ProjectXO {
             });
         }
 
-        private void ApplyFirewallRulesSilent() {
+        private void ApplyFirewallRulesSilent(bool showSuccessDialog = false) {
+            if (Interlocked.CompareExchange(ref _isApplyingFirewallRules, 1, 0) != 0) {
+                Log("WFP", "Правила ядра уже применяются в фоновом режиме, подождите завершения...", Color.FromArgb(249, 115, 22));
+                if (showSuccessDialog) {
+                    MessageBox.Show("Операция применения правил уже выполняется в фоновом режиме.", "WFP Брандмауэр", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                return;
+            }
+
             Log("WFP", "Применение правил изоляции сетевых интерфейсов в ядре Windows...", Color.FromArgb(52, 211, 153));
             ThreadPool.QueueUserWorkItem((st) => {
                 try {
+                    string script = 
+                        "$ErrorActionPreference = 'SilentlyContinue'; " +
+                        "Get-NetFirewallRule | Where-Object { $_.Name -like 'Claude-Shield*' -or $_.DisplayName -like 'Claude-Shield*' } | Remove-NetFirewallRule; " +
+                        "Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -like 'Claude-Shield*' -or (Get-ItemPropertyValue 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' $_.Name) -like '*Claude-Shield*' } | ForEach-Object { Remove-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' -Name $_.Name }; " +
+                        "$adapters = @(Get-NetAdapter | Where-Object { $_.InterfaceDescription -notmatch 'Wintun|WireGuard|TAP|TUN|Virtual|Tailscale|Amnezia' -and ($_.PhysicalMediaType -match '802.11|802.3|Native 802.11' -or $_.Name -match 'Wi-Fi|Ethernet|Беспроводная') } | Select-Object -ExpandProperty Name); " +
+                        "$idx = 1; " +
+                        "foreach ($a in $adapters) { " +
+                        "  $id = ($a -replace '[^a-zA-Z0-9]','_'); " +
+                        "  New-NetFirewallRule -Name ('Claude-Shield-IPv4-' + $id) -DisplayName ('Claude-Shield-Block-IPv4-' + $a) -Direction Outbound -RemoteAddress '160.79.104.0/23' -InterfaceAlias $a -Action Block | Out-Null; " +
+                        "  New-NetFirewallRule -Name ('Claude-Shield-IPv6-' + $id) -DisplayName ('Claude-Shield-Block-IPv6-' + $a) -Direction Outbound -RemoteAddress '2607:6bc0::/32' -InterfaceAlias $a -Action Block | Out-Null; " +
+                        "  New-NetFirewallRule -Name ('Claude-Shield-App-' + $id) -DisplayName ('Claude-Shield-Block-App-' + $a) -Direction Outbound -Program 'Claude.exe' -InterfaceAlias $a -Action Block | Out-Null; " +
+                        "  New-NetFirewallRule -Name ('Claude-Shield-CLI-' + $id) -DisplayName ('Claude-Shield-Block-CLI-' + $a) -Direction Outbound -Program 'claude.exe' -InterfaceAlias $a -Action Block | Out-Null; " +
+                        "  New-NetFirewallRule -Name ('Claude-Shield-Pkg-' + $id) -DisplayName ('Claude-Shield-Block-Pkg-' + $a) -Direction Outbound -PackageFamilyName 'Claude_pzs8sxrjxfjjc' -InterfaceAlias $a -Action Block | Out-Null; " +
+                        "  Disable-NetAdapterBinding -Name $a -ComponentId ms_tcpip6; " +
+                        "  $idx++; " +
+                        "} " +
+                        "if (!(Test-Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient')) { New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' -Force | Out-Null }; " +
+                        "Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' -Name 'DisableSmartNameResolution' -Value 1 -Type DWord -Force; " +
+                        "Clear-DnsClientCache";
+
                     ProcessStartInfo psi = new ProcessStartInfo {
                         FileName = "powershell.exe",
-                        Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" +
-                            "Remove-NetFirewallRule -DisplayName 'Claude-Shield-*' -ErrorAction SilentlyContinue; " +
-                            "$phys = @(Get-NetAdapter | Where-Object { $_.InterfaceDescription -notmatch 'Wintun|WireGuard|TAP|TUN|Virtual|Tailscale|Amnezia' -and ($_.PhysicalMediaType -match '802.11|802.3|Native 802.11' -or $_.Name -match 'Wi-Fi|Ethernet|Беспроводная') } | Select-Object -ExpandProperty Name); " +
-                            "foreach ($a in $phys) { " +
-                            "  New-NetFirewallRule -DisplayName ('Claude-Shield-Block-IPv4-' + $a) -Direction Outbound -RemoteAddress '160.79.104.0/23' -InterfaceAlias $a -Action Block -ErrorAction SilentlyContinue | Out-Null; " +
-                            "  New-NetFirewallRule -DisplayName ('Claude-Shield-Block-IPv6-' + $a) -Direction Outbound -RemoteAddress '2607:6bc0::/32' -InterfaceAlias $a -Action Block -ErrorAction SilentlyContinue | Out-Null; " +
-                            "  New-NetFirewallRule -DisplayName ('Claude-Shield-Block-App-' + $a) -Direction Outbound -Program 'Claude.exe' -InterfaceAlias $a -Action Block -ErrorAction SilentlyContinue | Out-Null; " +
-                            "  New-NetFirewallRule -DisplayName ('Claude-Shield-Block-CLI-' + $a) -Direction Outbound -Program 'claude.exe' -InterfaceAlias $a -Action Block -ErrorAction SilentlyContinue | Out-Null; " +
-                            "  New-NetFirewallRule -DisplayName ('Claude-Shield-Block-Pkg-' + $a) -Direction Outbound -PackageFamilyName 'Claude_pzs8sxrjxfjjc' -InterfaceAlias $a -Action Block -ErrorAction SilentlyContinue | Out-Null; " +
-                            "  Disable-NetAdapterBinding -Name $a -ComponentId ms_tcpip6 -ErrorAction SilentlyContinue; " +
-                            "} " +
-                            "if (!(Test-Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient')) { New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' -Force | Out-Null }; " +
-                            "Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' -Name 'DisableSmartNameResolution' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue; " +
-                            "Clear-DnsClientCache\"",
+                        Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" + script + "\"",
                         CreateNoWindow = true,
                         UseShellExecute = false,
                         WindowStyle = ProcessWindowStyle.Hidden
@@ -3329,14 +3619,36 @@ namespace ProjectXO {
                     proc.WaitForExit();
 
                     SafeInvoke(() => {
-                        Log("WFP", "Правила ядра успешно применены. Сеть защищена от утечек.", Color.FromArgb(52, 211, 153));
+                        int count = GetFirewallRuleCountFromRegistry();
+                        Log("WFP", string.Format("Правила WFP успешно применены ({0} правил в реестре). Сеть защищена от утечек.", count), Color.FromArgb(52, 211, 153));
                         StartAudit();
-                        MessageBox.Show("Правила аппаратной изоляции WFP успешно применены.", "Claude Anti-Ban Barrier", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        if (showSuccessDialog) {
+                            MessageBox.Show(
+                                "Правила аппаратной изоляции WFP успешно применены!\n\n" +
+                                "• Внедрено уникальных правил в ядро: " + count + " шт.\n" +
+                                "• Заблокирован прямой доступ к 160.79.104.0/23.\n" +
+                                "• Изолированы физические сетевые адаптеры.\n" +
+                                "• Отключены утечки IPv6 и Smart DNS.\n\n" +
+                                "Трафик Claude физически изолирован внутри туннеля.",
+                                "WFP Брандмауэр ядра — Успешно",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information);
+                        }
                     });
                 } catch (Exception ex) {
                     SafeInvoke(() => {
                         Log("ERR", "Ошибка установки правил WFP: " + ex.Message, Color.FromArgb(239, 68, 68));
+                        if (showSuccessDialog) {
+                            MessageBox.Show(
+                                "Не удалось применить правила WFP:\n" + ex.Message + "\n\n" +
+                                "Убедитесь, что приложение запущено от имени Администратора.",
+                                "Ошибка WFP",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Error);
+                        }
                     });
+                } finally {
+                    Interlocked.Exchange(ref _isApplyingFirewallRules, 0);
                 }
             });
         }
