@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -90,6 +91,7 @@ namespace ProjectXO {
         public string ClaudeCodePath = "";
         public string ZapretPath = "";
         public string ZapretArgs = "--wf-tcp=443 --dpi-desync=split2 --dpi-desync-split-pos=1 --dpi-desync-fooling=badseq";
+        public bool AutoStartZapret = false;
 
         private string ConfigPath {
             get {
@@ -116,6 +118,7 @@ namespace ProjectXO {
                             else if (k == "ClaudeCodePath") ClaudeCodePath = v;
                             else if (k == "ZapretPath") ZapretPath = v;
                             else if (k == "ZapretArgs") ZapretArgs = v;
+                            else if (k == "AutoStartZapret") AutoStartZapret = (v == "1" || v.ToLower() == "true");
                         }
                     }
                 }
@@ -131,7 +134,8 @@ namespace ProjectXO {
                     "ClaudePath=" + (ClaudePath ?? ""),
                     "ClaudeCodePath=" + (ClaudeCodePath ?? ""),
                     "ZapretPath=" + (ZapretPath ?? ""),
-                    "ZapretArgs=" + (ZapretArgs ?? "")
+                    "ZapretArgs=" + (ZapretArgs ?? ""),
+                    "AutoStartZapret=" + (AutoStartZapret ? "1" : "0")
                 };
                 File.WriteAllLines(ConfigPath, lines.ToArray());
             } catch {}
@@ -926,6 +930,11 @@ namespace ProjectXO {
         private LauncherCard _cardBrowser;
         private LauncherCard _cardCli;
 
+        // Zapret интеграция
+        private Process _zapretProcess = null;
+        private Label _lblZapretStatus;
+        private CloudflareButton _btnToggleZapret;
+
         // Телеметрия HUD и чипы
         private TelemetryStatChip _statChipIp;
         private TelemetryStatChip _statChipWfp;
@@ -995,6 +1004,7 @@ namespace ProjectXO {
                 Log("SYSTEM", "Барьер запущен с правами администратора. Служба ядра WFP готова к работе.", Color.FromArgb(52, 211, 153));
                 StartAudit();
                 StartWatchdog();
+                UpdateZapretUiState();
             };
 
             if (args != null && Array.IndexOf(args, "--minimized") >= 0) {
@@ -1032,6 +1042,11 @@ namespace ProjectXO {
                     "Защита работает в фоне. Для возврата к окну дважды нажмите на иконку в трее.", ToolTipIcon.Info);
                 Log("TRAY", "Окно свернуто в трей. Фоновая изоляция активна.", Color.FromArgb(148, 163, 184));
             } else {
+                try {
+                    if (_zapretProcess != null && !_zapretProcess.HasExited) {
+                        _zapretProcess.Kill();
+                    }
+                } catch {}
                 base.OnFormClosing(e);
             }
         }
@@ -1897,7 +1912,7 @@ namespace ProjectXO {
 
             Panel pnlZapret = new Panel() {
                 Location = new Point(24, 90),
-                Size = new Size(794, 110),
+                Size = new Size(794, 118),
                 BackColor = Color.FromArgb(21, 24, 34)
             };
             pnlZapret.Paint += (s, pe) => {
@@ -1912,27 +1927,36 @@ namespace ProjectXO {
             page.Controls.Add(pnlZapret);
 
             Label zTitle = new Label() {
-                Text = "Интеграция с Zapret DPI Bypass (winws.exe)",
+                Text = "Встроенный модуль Zapret DPI Bypass (winws.exe)",
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(248, 250, 252),
-                Location = new Point(16, 14),
+                Location = new Point(16, 12),
                 AutoSize = true
             };
             pnlZapret.Controls.Add(zTitle);
 
+            _lblZapretStatus = new Label() {
+                Text = "○ Служба выключена (по умолчанию отключена)",
+                Font = new Font("Segoe UI", 8.5f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(16, 36),
+                AutoSize = true
+            };
+            pnlZapret.Controls.Add(_lblZapretStatus);
+
             Label zDesc = new Label() {
-                Text = "Запуск службы обхода ТСПУ для порта TCP 443:\n" + (_cfg.ZapretArgs ?? "--wf-tcp=443 --dpi-desync=split2 --dpi-desync-split-pos=1"),
+                Text = "Низкоуровневая фрагментация TCP 443 для обхода ТСПУ:\n" + (_cfg.ZapretArgs ?? "--wf-tcp=443 --dpi-desync=split2 --dpi-desync-split-pos=1"),
                 Font = new Font("Consolas", 8.2f),
                 ForeColor = Color.FromArgb(148, 163, 184),
-                Location = new Point(16, 40),
+                Location = new Point(16, 58),
                 Size = new Size(580, 50)
             };
             pnlZapret.Controls.Add(zDesc);
 
-            CloudflareButton btnZapret = new CloudflareButton() {
+            _btnToggleZapret = new CloudflareButton() {
                 Text = "Запустить Zapret",
-                Location = new Point(620, 35),
-                Size = new Size(155, 38),
+                Location = new Point(610, 38),
+                Size = new Size(165, 42),
                 CornerRadius = 8,
                 GradientStart = Color.FromArgb(30, 34, 48),
                 GradientEnd = Color.FromArgb(24, 27, 38),
@@ -1941,11 +1965,11 @@ namespace ProjectXO {
                 ForeColor = Color.FromArgb(241, 245, 249),
                 BorderStrokeColor = Color.FromArgb(45, 52, 70)
             };
-            btnZapret.Click += (s, e) => LaunchZapretSilent();
-            pnlZapret.Controls.Add(btnZapret);
+            _btnToggleZapret.Click += (s, e) => ToggleZapret();
+            pnlZapret.Controls.Add(_btnToggleZapret);
 
             Panel pnlDoh = new Panel() {
-                Location = new Point(24, 215),
+                Location = new Point(24, 224),
                 Size = new Size(794, 110),
                 BackColor = Color.FromArgb(21, 24, 34)
             };
@@ -2250,9 +2274,24 @@ namespace ProjectXO {
             txtZapretArgs.TextChanged += (s, e) => { _cfg.ZapretArgs = txtZapretArgs.Text; _cfg.Save(); };
             page.Controls.Add(txtZapretArgs);
 
+            // 5. Опция автозапуска Zapret (по умолчанию отключена)
+            CheckBox chkAutoZapret = new CheckBox() {
+                Text = "Автоматически активировать Zapret DPI Bypass при включении барьера защиты (по умолчанию выключен)",
+                Location = new Point(28, 348),
+                AutoSize = true,
+                ForeColor = Color.FromArgb(203, 213, 225),
+                Font = new Font("Segoe UI", 9f),
+                Checked = _cfg.AutoStartZapret
+            };
+            chkAutoZapret.CheckedChanged += (s, e) => {
+                _cfg.AutoStartZapret = chkAutoZapret.Checked;
+                _cfg.Save();
+            };
+            page.Controls.Add(chkAutoZapret);
+
             // Блок деинсталляции
             Panel pnlUninstall = new Panel() {
-                Location = new Point(28, 360),
+                Location = new Point(28, 388),
                 Size = new Size(787, 95),
                 BackColor = Color.FromArgb(32, 20, 24)
             };
@@ -2493,40 +2532,156 @@ namespace ProjectXO {
             }
         }
 
-        private void LaunchZapretSilent() {
-            string zapretPath = _cfg.ZapretPath;
-            if (string.IsNullOrEmpty(zapretPath) || !File.Exists(zapretPath)) {
-                zapretPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tools", "winws.exe");
-                if (!File.Exists(zapretPath)) {
-                    zapretPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "winws.exe");
+        // Извлечение встроенного пакета Zapret (winws, WinDivert, cygwin1) из ресурсов
+        private string EnsureZapretToolsExtracted() {
+            try {
+                if (!string.IsNullOrEmpty(_cfg.ZapretPath) && File.Exists(_cfg.ZapretPath)) {
+                    return _cfg.ZapretPath;
                 }
+
+                string toolsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tools");
+                string localWinws = Path.Combine(toolsDir, "winws.exe");
+                if (File.Exists(localWinws)) {
+                    _cfg.ZapretPath = localWinws;
+                    return localWinws;
+                }
+
+                if (!Directory.Exists(toolsDir)) Directory.CreateDirectory(toolsDir);
+
+                // Распаковка встроенного zip-архива ресурсов
+                var asm = Assembly.GetExecutingAssembly();
+                using (Stream stream = asm.GetManifestResourceStream("zapret_bundle.zip")) {
+                    if (stream != null) {
+                        using (ZipArchive archive = new ZipArchive(stream, ZipArchiveMode.Read)) {
+                            foreach (ZipArchiveEntry entry in archive.Entries) {
+                                string destPath = Path.Combine(toolsDir, entry.FullName);
+                                if (!File.Exists(destPath) || new FileInfo(destPath).Length != entry.Length) {
+                                    entry.ExtractToFile(destPath, true);
+                                }
+                            }
+                        }
+                        Log("SYS", "Встроенные модули Zapret DPI Bypass успешно распакованы в tools/", Color.FromArgb(52, 211, 153));
+                        _cfg.ZapretPath = localWinws;
+                        _cfg.Save();
+                        return localWinws;
+                    }
+                }
+
+                // Поиск на Рабочем столе пользователя
+                string userDesktop = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                string[] candidates = new string[] {
+                    Path.Combine(userDesktop, @"Desktop\zapret-discord-youtube-1.10.4\bin\winws.exe"),
+                    @"C:\zapret\winws.exe",
+                    @"C:\zapret-win-bundle-master\zapret-winws\winws.exe"
+                };
+                foreach (string cand in candidates) {
+                    if (File.Exists(cand)) {
+                        _cfg.ZapretPath = cand;
+                        return cand;
+                    }
+                }
+            } catch (Exception ex) {
+                Log("ERR", "Ошибка подготовки бинарных файлов Zapret: " + ex.Message, Color.FromArgb(239, 68, 68));
             }
+            return null;
+        }
 
-            if (File.Exists(zapretPath)) {
-                try {
-                    string args = string.IsNullOrEmpty(_cfg.ZapretArgs)
-                        ? "--wf-tcp=443 --dpi-desync=split2 --dpi-desync-split-pos=1 --dpi-desync-fooling=badseq"
-                        : _cfg.ZapretArgs;
+        private bool IsZapretProcessRunning() {
+            try {
+                if (_zapretProcess != null && !_zapretProcess.HasExited) return true;
+                Process[] procs = Process.GetProcessesByName("winws");
+                return procs != null && procs.Length > 0;
+            } catch {
+                return false;
+            }
+        }
 
-                    ProcessStartInfo psi = new ProcessStartInfo {
-                        FileName = zapretPath,
-                        Arguments = args,
-                        CreateNoWindow = true,
-                        UseShellExecute = false,
-                        WindowStyle = ProcessWindowStyle.Hidden
-                    };
-                    Process.Start(psi);
-                    Log("ZAPRET", "Zapret winws.exe успешно запущен с аргументами: " + args, Color.FromArgb(52, 211, 153));
-                    MessageBox.Show("Служба Zapret успешно запущена в фоновом режиме.\nПараметры: " + args,
-                        "Zapret DPI Bypass", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                } catch (Exception ex) {
-                    Log("ERR", "Не удалось запустить Zapret: " + ex.Message, Color.FromArgb(239, 68, 68));
-                }
+        private void ToggleZapret() {
+            if (IsZapretProcessRunning()) {
+                StopZapret();
             } else {
-                Log("WARN", "Бинарный файл winws.exe не обнаружен. Задайте путь в Настройках.", Color.FromArgb(248, 113, 113));
-                MessageBox.Show("Файл winws.exe не найден. Перейдите во вкладку «Настройки» и укажите путь к исполняемому файлу Zapret.",
-                    "Zapret DPI", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                StartZapret();
             }
+        }
+
+        private void StartZapret() {
+            try {
+                string winwsPath = EnsureZapretToolsExtracted();
+                if (string.IsNullOrEmpty(winwsPath) || !File.Exists(winwsPath)) {
+                    Log("WARN", "Бинарный файл winws.exe не обнаружен. Проверьте папку tools/ или Настройки.", Color.FromArgb(248, 113, 113));
+                    MessageBox.Show("Файл winws.exe не найден. Перейдите во вкладку «Настройки» и укажите путь к Zapret.",
+                        "Zapret DPI", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                string binDir = Path.GetDirectoryName(winwsPath);
+                string args = string.IsNullOrEmpty(_cfg.ZapretArgs)
+                    ? "--wf-tcp=443 --dpi-desync=split2 --dpi-desync-split-pos=1 --dpi-desync-fooling=badseq"
+                    : _cfg.ZapretArgs;
+
+                ProcessStartInfo psi = new ProcessStartInfo {
+                    FileName = winwsPath,
+                    Arguments = args,
+                    WorkingDirectory = binDir,
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                };
+
+                _zapretProcess = Process.Start(psi);
+                int pid = _zapretProcess != null ? _zapretProcess.Id : 0;
+                Log("ZAPRET", "Служба Zapret winws.exe запущена в фоне (PID " + (pid > 0 ? pid.ToString() : "N/A") + ")", Color.FromArgb(52, 211, 153));
+                UpdateZapretUiState();
+            } catch (Exception ex) {
+                Log("ERR", "Не удалось запустить Zapret: " + ex.Message, Color.FromArgb(239, 68, 68));
+            }
+        }
+
+        private void StopZapret() {
+            try {
+                if (_zapretProcess != null && !_zapretProcess.HasExited) {
+                    _zapretProcess.Kill();
+                    _zapretProcess = null;
+                }
+                foreach (Process p in Process.GetProcessesByName("winws")) {
+                    try { p.Kill(); } catch {}
+                }
+                Log("ZAPRET", "Служба Zapret DPI Bypass деактивирована", Color.FromArgb(148, 163, 184));
+                UpdateZapretUiState();
+            } catch (Exception ex) {
+                Log("ERR", "Ошибка остановки Zapret: " + ex.Message, Color.FromArgb(239, 68, 68));
+            }
+        }
+
+        private void UpdateZapretUiState() {
+            SafeInvoke(() => {
+                bool running = IsZapretProcessRunning();
+                if (_lblZapretStatus != null) {
+                    if (running) {
+                        _lblZapretStatus.Text = "● Служба активна в фоновом режиме (перехват DPI TCP 443)";
+                        _lblZapretStatus.ForeColor = Color.FromArgb(52, 211, 153);
+                    } else {
+                        _lblZapretStatus.Text = "○ Служба выключена (по умолчанию отключена)";
+                        _lblZapretStatus.ForeColor = Color.FromArgb(148, 163, 184);
+                    }
+                }
+                if (_btnToggleZapret != null) {
+                    if (running) {
+                        _btnToggleZapret.Text = "Остановить Zapret";
+                        _btnToggleZapret.GradientStart = Color.FromArgb(185, 28, 28);
+                        _btnToggleZapret.GradientEnd = Color.FromArgb(153, 27, 27);
+                        _btnToggleZapret.HoverStart = Color.FromArgb(220, 38, 38);
+                        _btnToggleZapret.HoverEnd = Color.FromArgb(185, 28, 28);
+                    } else {
+                        _btnToggleZapret.Text = "Запустить Zapret";
+                        _btnToggleZapret.GradientStart = Color.FromArgb(30, 34, 48);
+                        _btnToggleZapret.GradientEnd = Color.FromArgb(24, 27, 38);
+                        _btnToggleZapret.HoverStart = Color.FromArgb(42, 48, 66);
+                        _btnToggleZapret.HoverEnd = Color.FromArgb(32, 36, 50);
+                    }
+                    _btnToggleZapret.Invalidate();
+                }
+            });
         }
 
         private void TestDoHResolver() {

@@ -25,8 +25,8 @@ if %errorlevel% neq 0 (
 echo [+] Uninstall_Project_XO.exe built successfully.
 
 echo.
-echo [*] [2/5] Compiling ProjectXO.exe (Vector GUI Shield with Tray Guard, DoH and Live Logs)...
-"%CSC%" /target:winexe /optimize+ /win32icon:"app_icon.ico" /resource:app_icon.ico,app_icon.ico /resource:app_icon.png,app_icon.png /out:"dist\ProjectXO.exe" "src\ProjectXO.cs"
+echo [*] [2/5] Compiling ProjectXO.exe (Vector GUI Shield with Embedded Zapret, Tray Guard, DoH and Live Logs)...
+"%CSC%" /target:winexe /optimize+ /win32icon:"app_icon.ico" /resource:app_icon.ico,app_icon.ico /resource:app_icon.png,app_icon.png /resource:tools\zapret_bundle.zip,zapret_bundle.zip /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /out:"dist\ProjectXO.exe" "src\ProjectXO.cs"
 if %errorlevel% neq 0 (
     echo [!] Failed to compile ProjectXO.exe
     exit /b %errorlevel%

@@ -5,7 +5,8 @@
 .vs/
 bin/
 obj/
-tools/
+tools/*
+!tools/zapret_bundle.zip
 android_app/build/
 claude_emblem_*.png
 raw_claude_*.png
