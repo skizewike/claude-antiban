@@ -7,10 +7,10 @@
 <img src="app_icon.png" width="120" alt="ClaudeBarrier Logo" />
 
 # ClaudeBarrier
-**Professional Network Protection & WFP Hardware Isolation Suite for Anthropic Claude**
+**Network Traffic Isolation Screen & Local Kill-Switch for Anthropic Claude**
 
 <p align="center">
-  <a href="https://github.com/skizewike/claude-antiban/releases/latest"><img src="https://img.shields.io/badge/release-v6.0.1-0078D4?style=for-the-badge&logo=github&logoColor=white" alt="Release" /></a>
+  <a href="https://github.com/skizewike/claude-antiban/releases/latest"><img src="https://img.shields.io/badge/release-v6.0.2-0078D4?style=for-the-badge&logo=github&logoColor=white" alt="Release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22c55e?style=for-the-badge" alt="License" /></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Android-6366f1?style=for-the-badge" alt="Platforms" />
   <a href="https://t.me/ClaudeBarrierBot"><img src="https://img.shields.io/badge/Telegram_Bot-@ClaudeBarrierBot-229ED9?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Bot" /></a>
@@ -22,46 +22,58 @@
 
 ## What is ClaudeBarrier?
 
-**ClaudeBarrier** is an open-source network security client built to deliver leak-proof protection for **Anthropic Claude** (Claude Desktop, `claude.ai` web app, and `Claude Code CLI`) against geo-restrictions, account terminations, and ISP route leaks.
+**ClaudeBarrier** is an open-source network security utility designed to prevent accidental leaks of your real ISP IP address and network packets when using **Anthropic Claude** (Claude Desktop, `claude.ai` web interface, and `Claude Code CLI`) over VPN connections.
 
-The client features a sleek dark UI with zero scrollbars, real-time live event streaming with chip filters, and hardware-grade isolation.
+The application features a dark user interface: segmented log toolbar, direct GitHub release checks, kernel network routing diagnostics, and secure configuration encryption via Windows DPAPI.
+
+---
+
+## ⚠️ Realistic Expectations & Limitations
+
+ClaudeBarrier solves a specific technical problem: **preventing packet and IP leaks through physical network adapters when VPN tunnels fail or drop**. It is not a silver bullet against all account bans.
+
+| What ClaudeBarrier Does | What ClaudeBarrier Does NOT Do |
+|---|---|
+| Blocks Claude traffic when VPN drops or misroutes | Does not modify browser or device fingerprints |
+| Prevents exposure of your real ISP IPv4 and IPv6 addresses | Does not protect against account bans based on behavioral patterns or billing |
+| Actively terminates IPv6 leaks on physical network adapters | Does not hide the fact that a VPN IP is used from Anthropic anti-fraud |
+| Immediately kills Claude processes on tunnel drop or PC sleep | Does not turn a datacenter IP into a residential clean IP |
+| Verifies default route 0.0.0.0/0 and WFP rule integrity | Does not encrypt traffic itself (that is your VPN's responsibility) |
+
+> [!NOTE]
+> If your VPN uses common datacenter IP ranges (DigitalOcean, AWS, Hetzner, etc.) or an IP already on Anthropic's blocklist, isolating traffic will not bypass account restrictions. Use high-quality residential/clean VPN tunnels.
 
 ---
 
 ## 📥 Direct Download
 
-| Operating System | Download Links |
+| Platform (OS) | Download Packages |
 | :--- | :--- |
-| **Windows** <br> `Windows 10 / 11 (x64)` | [![OfficialSetup x64](https://img.shields.io/badge/OfficialSetup-x64-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.1/ClaudeBarrier-Setup-x64.exe) <br><br> [![Portable x64](https://img.shields.io/badge/Portable-x64-334155?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.1/ClaudeBarrier-Windows-Portable-x64.zip) |
-| **Android** <br> `Android 8.0+` | [![APK Universal](https://img.shields.io/badge/APK-Universal-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.1/ClaudeBarrier-Android.apk) |
+| **Windows** <br> `Windows 10 / 11 (x64)` | [![OfficialSetup x64](https://img.shields.io/badge/OfficialSetup-x64-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.2/ClaudeBarrier-Setup-x64.exe) <br><br> [![Portable x64](https://img.shields.io/badge/Portable-x64-334155?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.2/ClaudeBarrier-Windows-Portable-x64.zip) |
+| **Android** <br> `Android 8.0+` | [![APK Universal](https://img.shields.io/badge/APK-Universal-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.2/ClaudeBarrier-Android.apk) |
 
 ---
 
 ## 🔑 Licensing & Activation
 
-An activation key formatted as `CB-XXXX-XXXX-XXXX-XXXX` is required:
-* **Key Issuance:** Free activation keys are distributed via the official Telegram bot [**@ClaudeBarrierBot**](https://t.me/ClaudeBarrierBot).
-* **HMAC-SHA256 Signature:** Every key carries a cryptographic signature verified offline by the core.
-* **Windows DPAPI Protection:** Active keys are encrypted on disk using `System.Security.Cryptography.ProtectedData` tied to the user profile, preventing unauthorized key extraction.
+Activation requires a free license key formatted as `CB-XXXX-XXXX-XXXX-XXXX`:
+* **Key Issuance:** Generated via the official Telegram bot [**@ClaudeBarrierBot**](https://t.me/ClaudeBarrierBot).
+* **HMAC-SHA256 Cryptography:** Validated offline by the core.
+* **Windows DPAPI Security:** Stored securely in the registry using Windows Data Protection API bound to the current user profile.
 
 ---
 
-## 🚀 Key Features
+## 🚀 Key Features in Version 6.0.2
 
-* **Zero-Leak Hardware Isolation (WFP Kernel Firewall):** Kernel-level packet filtering via the Windows Filtering Platform blocks Anthropic Claude CIDR blocks (`160.79.104.0/23` and `2607:6bc0::/32`) on all non-VPN network interfaces.
-* **3-Tier Failsafe Network KillSwitch:**
-  1. *Kernel (WFP):* Hardware-level packet drop on physical adapters.
-  2. *User-space Process Watchdog:* Gateway route monitor terminates Claude processes in memory within 15 ms of tunnel drops, even without admin rights.
-  3. *DNS Leak Prevention:* Disables Smart Multi-Homed Name Resolution and shuts down IPv6 on active adapters.
-* **Interactive Event Journal with Chip Filters:**
-  - Category filters: `[ All ]`, `[ Errors ]`, `[ Network ]`, `[ WFP ]`.
-  - Actions: `[ Clear ]`, `[ Export ]`, `[ Copy ]`.
-  - Full-height real-time terminal viewport.
-* **Embedded Zapret DPI Bypass (winws):** Bundled anti-censorship toolkit for bypassing DPI restrictions on Claude endpoints.
-* **Anti-Tamper & Security Hardening:**
-  - DLL Hijacking & Binary Planting immunity via `SetDllDirectory("")` and `SetDefaultDllDirectories`.
-  - Child process spawning strictly locked to `%SystemRoot%\System32`.
-  - Path sanitization and injection guards.
+* **Universal VPN Detection:** Auto-discovers any modern VPN client (WireGuard, AmneziaVPN, OpenVPN, TAP/TUN, WARP, Mullvad, ProtonVPN, Tailscale, Shadowsocks, Sing-box, Clash, Hiddify) by interface characteristics and driver description.
+* **Kernel Route 0.0.0.0/0 Verification:** Real-time Win32 `GetBestInterface` query for destination `160.79.104.10` ensures packets strictly egress through the VPN tunnel and not physical interfaces.
+* **Sleep / Hibernate Leak Protection:** Listens to `PowerModeChanged`. Terminates Claude processes immediately on system suspend; holds the network block on resume until VPN routing is re-established.
+* **Dynamic Adapter Rescan:** Detects newly connected physical interfaces (USB Wi-Fi dongles, docking stations) and auto-deploys WFP isolation rules without restarting.
+* **Firewall Rule Integrity Watchdog:** Periodically audits active WFP filters; auto-restores isolation rules if removed by third-party antivirus or Windows updates.
+* **Real-Time IPv6 Leak Monitor:** Continuously monitors physical adapters for global IPv6 addresses and disables `ms_tcpip6` dynamically.
+* **DNS Leak Audit:** Identifies ISP DNS queries and warns the user if encrypted DNS (DoH / Smart DNS) is not active.
+* **Failsafe Launch Guard:** Rejects unsafe Claude launches when VPN is offline and offers a one-click shortcut to Windows Network Connections (`ncpa.cpl`).
+* **Embedded Zapret DPI Bypass:** Desync packet modifications to counter DPI blocks on Anthropic domains.
 
 ---
 
@@ -71,7 +83,7 @@ An activation key formatted as `CB-XXXX-XXXX-XXXX-XXXX` is required:
 [ User Clients: Claude Desktop / Web / Claude Code CLI ]
                               │
                     ┌─────────▼─────────┐
-                    │   ClaudeBarrier   │ (Watchdog & KillSwitch)
+                    │   ClaudeBarrier   │ (Watchdog, Sleep Guard & KillSwitch)
                     └─────────┬─────────┘
                               │
                ┌──────────────┴──────────────┐
@@ -79,9 +91,9 @@ An activation key formatted as `CB-XXXX-XXXX-XXXX-XXXX` is required:
     [ VPN / Secure Tunnel ]       [ Physical NIC (Wi-Fi / LAN) ]
                │                             │
     ✅ Traffic Permitted          ❌ WFP KERNEL: Packets Dropped (DROP)
-                                     CIDR: 160.79.104.0/23
-                                     IPv6: Disabled (ms_tcpip6)
-                                     DNS: Leak Protected
+       (Route 0.0.0.0/0 verified)         CIDRs: 160.79.104.0/23
+                                          IPv6: ms_tcpip6 deactivated
+                                          DNS: Smart Multi-Homed disabled
 ```
 
 ---
@@ -96,10 +108,11 @@ cd claude-antiban
 build.bat
 ```
 
-The build pipeline will output:
-1. `dist\ClaudeBarrier-Setup-x64.exe` — Standalone installer;
-2. `dist\ClaudeBarrier-Windows-Portable-x64.zip` — Portable package;
-3. `dist\ClaudeBarrier-Android.apk` — Standalone Android APK.
+The pipeline outputs:
+1. `dist\ClaudeBarrier.exe` — Main executable;
+2. `dist\ClaudeBarrier-Setup-x64.exe` — Standalone installer;
+3. `dist\ClaudeBarrier-Windows-Portable-x64.zip` — Portable zip;
+4. `dist\ClaudeBarrier-Android.apk` — Android Sentinel client.
 
 ---
 

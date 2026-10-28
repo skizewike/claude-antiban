@@ -34,7 +34,7 @@ namespace ProjectXO.Uninstaller {
                     Process.Start(psi);
                     return;
                 } catch {
-                    MessageBox.Show("Для деинсталляции требуются права администратора.", "Claude Anti-Ban Barrier", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show("Для деинсталляции требуются права администратора.", "ClaudeBarrier", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
             }
@@ -482,13 +482,13 @@ namespace ProjectXO.Uninstaller {
                     Log("Удаление ярлыков системы...");
                     SetProgress(90);
                     string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                    foreach (string lnk in new string[] { "Claude Anti-Ban Barrier.lnk", "Project XO.lnk" }) {
+                    foreach (string lnk in new string[] { "ClaudeBarrier.lnk", "Claude Anti-Ban Barrier.lnk", "Project XO.lnk" }) {
                         string p = Path.Combine(desktop, lnk);
                         if (File.Exists(p)) { try { File.Delete(p); Log("Ярлык на Рабочем столе удален: " + lnk); } catch {} }
                     }
 
                     string commonPrograms = Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms);
-                    foreach (string sm in new string[] { "Claude Anti-Ban Barrier", "Project XO" }) {
+                    foreach (string sm in new string[] { "ClaudeBarrier", "Project XO" }) {
                         string sp = Path.Combine(commonPrograms, sm);
                         if (Directory.Exists(sp)) { try { Directory.Delete(sp, true); Log("Папка меню Пуск удалена: " + sm); } catch {} }
                     }

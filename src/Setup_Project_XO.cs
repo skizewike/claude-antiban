@@ -28,7 +28,7 @@ namespace ProjectXO.Installer {
                 if (File.Exists(uninstPath)) {
                     Process.Start(uninstPath);
                 } else {
-                    MessageBox.Show("Файл деинсталлятора не найден.", "Claude Anti-Ban Barrier", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show("Файл деинсталлятора не найден.", "ClaudeBarrier", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
                 return;
             }
@@ -183,7 +183,7 @@ namespace ProjectXO.Installer {
         private bool _isInstalling = false;
 
         public SetupForm() {
-            Text = "Установка Claude Anti-Ban Barrier";
+            Text = "Установка ClaudeBarrier";
             Width = 580;
             Height = 460;
             StartPosition = FormStartPosition.CenterScreen;
@@ -286,7 +286,7 @@ namespace ProjectXO.Installer {
             pnlTitle.Controls.Add(lblHeadTitle);
 
             Label lblHeadSub = new Label() {
-                Text = "Мастер установки автономного ядра безопасности // Релиз v6.0.1",
+                Text = "Мастер установки автономного ядра безопасности // Релиз v6.0.2",
                 Font = new Font("Segoe UI", 7.8f),
                 ForeColor = Color.FromArgb(148, 163, 184),
                 Location = new Point(49, 27),
@@ -343,7 +343,7 @@ namespace ProjectXO.Installer {
             };
             cardPath.Controls.Add(lblPathTitle);
 
-            _targetDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Claude Anti-Ban Barrier");
+            _targetDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ClaudeBarrier");
             _txtPath = new TextBox() {
                 Text = _targetDirectory,
                 Location = new Point(14, 32),
@@ -371,7 +371,7 @@ namespace ProjectXO.Installer {
             };
             btnBrowse.Click += (s, e) => {
                 using (FolderBrowserDialog fbd = new FolderBrowserDialog()) {
-                    fbd.Description = "Выберите папку для установки Claude Anti-Ban Barrier:";
+                    fbd.Description = "Выберите папку для установки ClaudeBarrier:";
                     fbd.SelectedPath = _targetDirectory;
                     if (fbd.ShowDialog() == DialogResult.OK) {
                         _targetDirectory = fbd.SelectedPath;
@@ -552,11 +552,11 @@ namespace ProjectXO.Installer {
 
                     SetProgress(60, "Создание ярлыков в системе...");
                     string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                    CreateShortcut(destExe, Path.Combine(desktop, "Claude Anti-Ban Barrier.lnk"), destIco);
+                    CreateShortcut(destExe, Path.Combine(desktop, "ClaudeBarrier.lnk"), destIco);
 
-                    string startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "Claude Anti-Ban Barrier");
+                    string startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "ClaudeBarrier");
                     if (!Directory.Exists(startMenu)) Directory.CreateDirectory(startMenu);
-                    CreateShortcut(destExe, Path.Combine(startMenu, "Claude Anti-Ban Barrier.lnk"), destIco);
+                    CreateShortcut(destExe, Path.Combine(startMenu, "ClaudeBarrier.lnk"), destIco);
                     CreateShortcut(destUninst, Path.Combine(startMenu, "Удалить Claude Barrier.lnk"), destIco);
 
                     SetProgress(80, "Регистрация программы в панели управления Windows...");
@@ -594,8 +594,8 @@ namespace ProjectXO.Installer {
             try {
                 using (RegistryKey rk = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeBarrier")) {
                     if (rk != null) {
-                        rk.SetValue("DisplayName", "Claude Anti-Ban Barrier");
-                        rk.SetValue("DisplayVersion", "6.0.1");
+                        rk.SetValue("DisplayName", "ClaudeBarrier");
+                        rk.SetValue("DisplayVersion", "6.0.2");
                         rk.SetValue("Publisher", "ClaudeBarrier Security Team");
                         rk.SetValue("DisplayIcon", mainExe + ",0");
                         rk.SetValue("UninstallString", "\"" + uninstallerExe + "\"");
@@ -615,7 +615,7 @@ namespace ProjectXO.Installer {
                 shortcut.TargetPath = targetPath;
                 shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
                 shortcut.IconLocation = (File.Exists(iconPath) ? iconPath : targetPath) + ",0";
-                shortcut.Description = "Claude Anti-Ban Barrier";
+                shortcut.Description = "ClaudeBarrier";
                 shortcut.Save();
             } catch {}
         }

@@ -49,7 +49,7 @@ namespace ProjectXO {
                 } catch {
                     MessageBox.Show(
                         "Для работы защитного барьера Claude требуются права Администратора (управление брандмауэром WFP).",
-                        "Claude Anti-Ban Barrier",
+                        "ClaudeBarrier",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
                 }
@@ -58,11 +58,11 @@ namespace ProjectXO {
 
             // 2. Гарантия единственного экземпляра
             bool createdNew;
-            using (Mutex m = new Mutex(true, "Global\\ClaudeAntiBanBarrier_BZ_Mutex", out createdNew)) {
+            using (Mutex m = new Mutex(true, "Global\\ClaudeBarrier_App_Mutex", out createdNew)) {
                 if (!createdNew) {
                     MessageBox.Show(
                         "Защитный барьер Claude Anti-Ban уже работает в системе (проверьте системный трей возле часов).",
-                        "Claude Anti-Ban Barrier",
+                        "ClaudeBarrier",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Information);
                     return;
@@ -309,7 +309,7 @@ namespace ProjectXO {
         public void Save() {
             try {
                 List<string> lines = new List<string> {
-                    "# Claude Anti-Ban Barrier Configuration // ClaudeBarrier Security Team",
+                    "# ClaudeBarrier Configuration // ClaudeBarrier Security Team",
                     "MinimizeToTrayOnClose=" + (MinimizeToTrayOnClose ? "1" : "0"),
                     "AutoStartWithWindows=" + (AutoStartWithWindows ? "1" : "0"),
                     "ClaudePath=" + (ClaudePath ?? ""),
@@ -1273,6 +1273,14 @@ namespace ProjectXO {
         private System.Windows.Forms.Timer _watchdogTimer;
         private bool _forceExit = false;
 
+        // Win32 Routing Helper & Watchdog States
+        [DllImport("iphlpapi.dll", ExactSpelling = true)]
+        public static extern int GetBestInterface(uint destAddr, out uint bestIfIndex);
+
+        private Label _lblWarpRouteVal;
+        private bool _isSuspended = false;
+        private int _watchdogTickCount = 0;
+
         public int CurrentPing = 0;
         public string CurrentIp = "...";
         public string CurrentCountry = "Проверка...";
@@ -1292,7 +1300,7 @@ namespace ProjectXO {
             AutoDetectAppPaths();
             _cfg.Save();
 
-            Text = "Claude Anti-Ban Barrier";
+            Text = "ClaudeBarrier";
             Width = 1060;
             Height = 720;
             StartPosition = FormStartPosition.CenterScreen;
@@ -1313,6 +1321,14 @@ namespace ProjectXO {
 
             BuildCustomWindowLayout();
             SetupTray();
+
+            // Bug 5: Sleep / Hibernate leak protection (PowerModeChanged subscription)
+            SystemEvents.PowerModeChanged += OnPowerModeChanged;
+            FormClosed += (s, e) => {
+                try {
+                    SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+                } catch {}
+            };
 
             Shown += (s, e) => {
                 Log("SYSTEM", "Барьер запущен с правами администратора. Служба ядра WFP готова к работе.", Color.FromArgb(52, 211, 153));
@@ -1352,12 +1368,35 @@ namespace ProjectXO {
             } catch {}
         }
 
+        // Bug 5: Sleep / Hibernate protection handler
+        private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e) {
+            if (e.Mode == PowerModes.Suspend) {
+                _isSuspended = true;
+                KillClaudeProcessesInMemory();
+                SafeInvoke(() => {
+                    SetProtectionUIState(ProtectionState.BlockedNoVpn, "Режим сна: трафик заблокирован");
+                });
+                Log("POWER", "СИСТЕМА: Переход в спящий режим (Suspend). Сетевой трафик Claude немедленно заблокирован.", Color.FromArgb(248, 113, 113));
+            } else if (e.Mode == PowerModes.Resume) {
+                _isSuspended = false;
+                KillClaudeProcessesInMemory();
+                SafeInvoke(() => {
+                    SetProtectionUIState(ProtectionState.BlockedNoVpn, "Выход из сна: ожидание VPN...");
+                });
+                Log("POWER", "СИСТЕМА: Выход из спящего режима (Resume). Блокировка активна до подтверждения безопасного маршрута.", Color.FromArgb(251, 191, 36));
+                ThreadPool.QueueUserWorkItem((st) => {
+                    Thread.Sleep(2500);
+                    StartAudit();
+                });
+            }
+        }
+
         protected override void OnFormClosing(FormClosingEventArgs e) {
             if (e.CloseReason == CloseReason.UserClosing && !_forceExit && _cfg.MinimizeToTrayOnClose) {
                 e.Cancel = true;
                 Hide();
                 if (_heroCloud != null) _heroCloud.PauseAnimation();
-                _trayIcon.ShowBalloonTip(2500, "Claude Anti-Ban Barrier",
+                _trayIcon.ShowBalloonTip(2500, "ClaudeBarrier",
                     "Защита работает в фоне. Для возврата к окну дважды нажмите на иконку в трее.", ToolTipIcon.Info);
                 Log("TRAY", "Окно свернуто в трей. Фоновая изоляция активна.", Color.FromArgb(148, 163, 184));
             } else {
@@ -1552,7 +1591,7 @@ namespace ProjectXO {
             _pnlTitlebar.Controls.Add(_appIconBox);
 
             _lblTitleText = new Label() {
-                Text = "Claude Anti-Ban Barrier",
+                Text = "ClaudeBarrier",
                 Font = new Font("Segoe UI", 9.2f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(248, 250, 252),
                 Location = new Point(40, 9),
@@ -1881,7 +1920,7 @@ namespace ProjectXO {
             pnlBrand.Controls.Add(lblBrandName);
 
             Label lblBrandSub = new Label() {
-                Text = "Project XO Client",
+                Text = "ClaudeBarrier Traffic Sentinel",
                 Font = new Font("Segoe UI", 7.5f),
                 ForeColor = Color.FromArgb(100, 116, 139),
                 Location = new Point(43, 27),
@@ -2177,7 +2216,7 @@ namespace ProjectXO {
 
             // Нижний футер 1 в 1 как в Cloudflare One Client
             Label lblCopy = new Label() {
-                Text = "v6.0.1 | ClaudeBarrier Security Core",
+                Text = "v6.0.2 | ClaudeBarrier Traffic Sentinel",
                 Font = new Font("Segoe UI", 8.2f),
                 ForeColor = Color.FromArgb(80, 95, 120),
                 Location = new Point(0, 642),
@@ -2462,18 +2501,42 @@ namespace ProjectXO {
             _lblWarpWfpVal.Click += (s, e) => ApplyFirewallRulesSilent(showSuccessDialog: true);
             cardTunnel.Controls.Add(_lblWarpWfpVal);
 
+            // Row 5: Маршрут 0.0.0.0/0 (Anthropic) (Bug 3)
+            Label lblRowRoute = new Label() {
+                Text = "Маршрут 0.0.0.0/0 и шлюз к Anthropic",
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 189),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardTunnel.Controls.Add(lblRowRoute);
+
+            _lblWarpRouteVal = new Label() {
+                Text = "Определение маршрута ядра...",
+                Font = new Font("Segoe UI", 9.2f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(320, 189),
+                Size = new Size(446, 20),
+                TextAlign = ContentAlignment.MiddleRight,
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand
+            };
+            _lblWarpRouteVal.Click += (s, e) => StartAudit();
+            cardTunnel.Controls.Add(_lblWarpRouteVal);
+
             // ================= SECTION 3: БЕЗОПАСНОСТЬ И ТЕСТЫ =================
             Label lblSecTitle = new Label() {
                 Text = "БЕЗОПАСНОСТЬ И ТЕСТЫ",
                 Font = new Font("Segoe UI", 8.2f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(148, 163, 184),
-                Location = new Point(34, 388),
+                Location = new Point(34, 430),
                 AutoSize = true
             };
             page.Controls.Add(lblSecTitle);
 
             Panel cardSec = new Panel() {
-                Location = new Point(32, 410),
+                Location = new Point(32, 452),
                 Size = new Size(786, 144),
                 BackColor = Color.FromArgb(19, 22, 32)
             };
@@ -2715,7 +2778,7 @@ namespace ProjectXO {
             page.Controls.Add(cardAdvisory);
 
             Label lblAdvTitle = new Label() {
-                Text = "ПРЕДУПРЕЖДЕНИЕ О БЕЗОПАСНОСТИ СЕТИ И РАЗРЫВЕ VPN-ТУННЕЛЯ",
+                Text = "Ограничения сетевой изоляции (что делает и чего НЕ делает утилита)",
                 Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(251, 191, 36),
                 Location = new Point(20, 10),
@@ -2725,7 +2788,7 @@ namespace ProjectXO {
             cardAdvisory.Controls.Add(lblAdvTitle);
 
             Label lblAdv1 = new Label() {
-                Text = "• При внезапном падении VPN операционная система мгновенно перенаправляет пакеты на физическую карту (Wi-Fi/Ethernet).",
+                Text = "• Блокирует сетевой трафик Claude при сбое VPN и закрывает утечки реального IP/IPv6 на физических картах.",
                 Font = new Font("Segoe UI", 8.2f),
                 ForeColor = Color.FromArgb(226, 232, 240),
                 Location = new Point(20, 44),
@@ -2735,7 +2798,7 @@ namespace ProjectXO {
             cardAdvisory.Controls.Add(lblAdv1);
 
             Label lblAdv2 = new Label() {
-                Text = "• Если брандмауэр Windows отключен антивирусом или барьер запущен без прав Администратора, WFP-фильтр ядра неактивен.",
+                Text = "• Защита от сна: при переходе ПК в сон сетевой шлюз блокируется до подтверждения маршрута через VPN.",
                 Font = new Font("Segoe UI", 8.2f),
                 ForeColor = Color.FromArgb(226, 232, 240),
                 Location = new Point(20, 70),
@@ -2745,7 +2808,7 @@ namespace ProjectXO {
             cardAdvisory.Controls.Add(lblAdv2);
 
             Label lblAdv3 = new Label() {
-                Text = "• В таком случае защиту обеспечивает пользовательский Сторож (Watchdog): он детектирует разрыв и мгновенно завершает Claude в памяти.",
+                Text = "• Контроль маршрута 0.0.0.0/0: отслеживает, что исходящий трафик не идет в обход туннеля через физический адаптер.",
                 Font = new Font("Segoe UI", 8.2f),
                 ForeColor = Color.FromArgb(226, 232, 240),
                 Location = new Point(20, 96),
@@ -2755,7 +2818,7 @@ namespace ProjectXO {
             cardAdvisory.Controls.Add(lblAdv3);
 
             Label lblAdv4 = new Label() {
-                Text = "• Для 100% гарантии обязательно нажмите «Применить правила» выше — это заблокирует прямой обход на аппаратном уровне ядра.",
+                Text = "• ВАЖНО: Утилита НЕ защищает от банов по отпечатку браузера (fingerprint), антифрод-правилам или биллингу Anthropic.",
                 Font = new Font("Segoe UI", 8.2f),
                 ForeColor = Color.FromArgb(226, 232, 240),
                 Location = new Point(20, 122),
@@ -3316,11 +3379,11 @@ namespace ProjectXO {
                     ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; // Tls12
                     HttpWebRequest req = (HttpWebRequest)WebRequest.Create("https://github.com/skizewike/claude-antiban/releases/latest");
                     req.Method = "HEAD";
-                    req.UserAgent = "ClaudeBarrier-Client/6.0.1";
+                    req.UserAgent = "ClaudeBarrier-Client/6.0.2";
                     req.Timeout = 6000;
                     req.AllowAutoRedirect = false;
 
-                    string latestTag = "v6.0.1";
+                    string latestTag = "v6.0.2";
                     string loc = "";
                     using (HttpWebResponse res = (HttpWebResponse)req.GetResponse()) {
                         loc = res.GetResponseHeader("Location");
@@ -3334,7 +3397,7 @@ namespace ProjectXO {
 
                     SafeInvoke(() => {
                         _latestReleaseUrl = string.IsNullOrEmpty(loc) ? "https://github.com/skizewike/claude-antiban/releases/latest" : loc;
-                        string curVer = "v6.0.1";
+                        string curVer = "v6.0.2";
                         bool isNewer = CompareVersions(latestTag, curVer) > 0;
 
                         if (isNewer) {
@@ -3451,18 +3514,28 @@ namespace ProjectXO {
         private bool ConfirmUnsafeLaunch(string targetName) {
             if (_currentState == ProtectionState.Protected) return true;
 
+            string statusReason = (_currentState == ProtectionState.BlockedNoVpn)
+                ? "VPN-соединение не обнаружено или маршрут по умолчанию идет в обход туннеля."
+                : "Обнаружена возможная сетевая утечка или открытый маршрут к Anthropic.";
+
+            string message = string.Format(
+                "ВНИМАНИЕ: Запуск {0} заблокирован системой ClaudeBarrier!\n\n" +
+                "Причина: {1}\n\n" +
+                "Прямое обращение к серверам Anthropic без VPN раскроет ваш реальный IP-адрес интернет-провайдера, что приведет к геоблокировке аккаунта.\n\n" +
+                "• Нажмите [Да], чтобы открыть сетевые подключения Windows (ncpa.cpl) для включения VPN.\n" +
+                "• Нажмите [Нет], чтобы безопасно отменить запуск.",
+                targetName, statusReason);
+
             DialogResult res = MessageBox.Show(
-                "ПРЕДУПРЕЖДЕНИЕ БЕЗОПАСНОСТИ // CLAUDE ANTI-BAN BARRIER\n\n" +
-                "Сетевой туннель VPN не подтвержден или внешний IP может относиться к РФ/РБ.\n\n" +
-                "Прямой запуск без VPN несет прямой риск бана аккаунта Anthropic.\n\n" +
-                "Вы действительно хотите принудительно запустить " + targetName + "?",
-                "Предупреждение безопасности",
+                message,
+                "ClaudeBarrier // Предотвращение утечки IP",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning);
 
             if (res == DialogResult.Yes) {
-                Log("WARN", "Пользователь подтвердил принудительный запуск " + targetName + " без подтвержденного VPN.", Color.FromArgb(248, 113, 113));
-                return true;
+                try {
+                    Process.Start("ncpa.cpl");
+                } catch {}
             }
             return false;
         }
@@ -3583,7 +3656,7 @@ namespace ProjectXO {
                 _forceExit = true;
                 Application.Exit();
             } else {
-                MessageBox.Show("Файл деинсталлятора не найден в директории приложения.", "Claude Anti-Ban Barrier", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Файл деинсталлятора не найден в директории приложения.", "ClaudeBarrier", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
@@ -3821,7 +3894,7 @@ namespace ProjectXO {
                 }
             } catch {}
 
-            _trayIcon.Text = "Claude Anti-Ban Barrier";
+            _trayIcon.Text = "ClaudeBarrier";
             _trayIcon.Visible = true;
             _trayIcon.DoubleClick += (s, e) => {
                 Show();
@@ -3852,53 +3925,116 @@ namespace ProjectXO {
         }
 
         // РЕАЛЬНЫЙ СЕТЕВОЙ АУДИТ: 100% НАСТОЯЩИЕ ДАННЫЕ БЕЗ ВИЗУАЛЬНОГО СЛОПА
-        private void StartAudit() {
-            SetProtectionUIState(ProtectionState.Checking, "Выполняется аудит сетевого шлюза...");
-            Log("AUDIT", "Запуск проверки сетевых интерфейсов, отклика Anthropic и геолокации IP...", Color.FromArgb(148, 163, 184));
+        // Bug 2: Универсальное определение VPN по типу адаптера и описанию
+        public static bool IsVpnInterface(NetworkInterface nic) {
+            if (nic == null) return false;
+            if (nic.NetworkInterfaceType == NetworkInterfaceType.Ppp ||
+                nic.NetworkInterfaceType == NetworkInterfaceType.Slip ||
+                (int)nic.NetworkInterfaceType == 53) { // 53 = PropVirtual / NDIS Tunnel
+                return true;
+            }
+            string d = (nic.Description ?? "").ToLowerInvariant();
+            string n = (nic.Name ?? "").ToLowerInvariant();
+            string[] vpnKeywords = new string[] {
+                "wintun", "wireguard", "tap", "tun", "openvpn", "amnezia", "warp",
+                "mullvad", "proton", "tailscale", "nekoray", "sing-box", "clash",
+                "v2ray", "shadowsocks", "hiddify", "vpn"
+            };
+            foreach (string kw in vpnKeywords) {
+                if (d.Contains(kw) || n.Contains(kw)) return true;
+            }
+            return false;
+        }
 
+        // Bug 3: Проверка маршрутизации ядра к серверам Anthropic (160.79.104.10) через Win32 GetBestInterface
+        public static bool CheckAnthropicRouting(out string bestAdapterName, out string bestDesc, out bool isVpnRoute, out uint ifIndex) {
+            bestAdapterName = "Не определен";
+            bestDesc = "";
+            isVpnRoute = false;
+            ifIndex = 0;
+            try {
+                IPAddress target = IPAddress.Parse("160.79.104.10");
+                byte[] bytes = target.GetAddressBytes();
+                uint addr = BitConverter.ToUInt32(bytes, 0);
+
+                int ret = GetBestInterface(addr, out ifIndex);
+                if (ret == 0) {
+                    foreach (NetworkInterface nic in NetworkInterface.GetAllNetworkInterfaces()) {
+                        try {
+                            IPInterfaceProperties ipProps = nic.GetIPProperties();
+                            IPv4InterfaceProperties v4 = ipProps.GetIPv4Properties();
+                            if (v4 != null && v4.Index == ifIndex) {
+                                bestAdapterName = nic.Name;
+                                bestDesc = nic.Description;
+                                if (nic.OperationalStatus == OperationalStatus.Up && IsVpnInterface(nic)) {
+                                    isVpnRoute = true;
+                                } else {
+                                    isVpnRoute = false;
+                                }
+                                return true;
+                            }
+                        } catch {}
+                    }
+                }
+            } catch {}
+            return false;
+        }
+
+        private bool HasFirewallRulesForAdapter(string sanitizedId) {
+            try {
+                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules")) {
+                    if (key != null) {
+                        string ruleName = "Claude-Shield-IPv4-" + sanitizedId;
+                        if (key.GetValue(ruleName) != null) return true;
+                        foreach (string valName in key.GetValueNames()) {
+                            if (valName.IndexOf(sanitizedId, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                        }
+                    }
+                }
+            } catch {}
+            return false;
+        }
+
+        private void StartAudit() {
             ThreadPool.QueueUserWorkItem((state) => {
                 try {
-                    bool isRuIp = false;
-                    string ipStr = "Не определен";
-                    string countryStr = "Неизвестно";
-                    int pingMs = 0;
-
                     ManualResetEvent doneIp = new ManualResetEvent(false);
                     ManualResetEvent donePing = new ManualResetEvent(false);
 
-                    // 1. Определение реального IP и страны с несколькими независимыми источниками
+                    string ipStr = "Не определен";
+                    string countryStr = "Неизвестно";
+                    bool isRuIp = false;
+                    int pingMs = 0;
+
+                    // 1. Определение внешнего IP через Cloudflare DoH / Geo
                     ThreadPool.QueueUserWorkItem((_) => {
-                        string[] ipServices = new string[] {
-                            "http://ip-api.com/json",
-                            "https://api.ipify.org?format=json",
-                            "https://ipinfo.io/json"
+                        string[] geoEndpoints = new string[] {
+                            "https://speed.cloudflare.com/meta",
+                            "https://ipapi.co/json/",
+                            "https://ipwho.is/"
                         };
 
-                        foreach (string srv in ipServices) {
+                        foreach (string url in geoEndpoints) {
                             try {
-                                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(srv);
-                                req.Proxy = null; // Отключение WPAD-поиска для отклика < 200 мс
-                                req.Timeout = 2200;
-                                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/5.2";
-
+                                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                                req.Proxy = null;
+                                req.Timeout = 2800;
+                                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/6.0";
                                 using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
                                 using (StreamReader sr = new StreamReader(resp.GetResponseStream())) {
                                     string json = sr.ReadToEnd();
+                                    int ipIdx = json.IndexOf("\"clientIp\":\"");
+                                    if (ipIdx < 0) ipIdx = json.IndexOf("\"ip\":\"");
+                                    if (ipIdx < 0) ipIdx = json.IndexOf("\"ip\": \"");
 
-                                    // Всегда извлекаем IP адрес
-                                    int qIdx = json.IndexOf("\"query\":\"");
-                                    if (qIdx > 0) {
-                                        int endQ = json.IndexOf("\"", qIdx + 9);
-                                        if (endQ > 0) ipStr = json.Substring(qIdx + 9, endQ - (qIdx + 9));
-                                    } else {
-                                        int ipIdx = json.IndexOf("\"ip\":\"");
-                                        if (ipIdx > 0) {
-                                            int endIp = json.IndexOf("\"", ipIdx + 6);
-                                            if (endIp > 0) ipStr = json.Substring(ipIdx + 6, endIp - (ipIdx + 6));
+                                    if (ipIdx > 0) {
+                                        int startQuote = json.IndexOf("\"", ipIdx + 5);
+                                        int endQuote = json.IndexOf("\"", startQuote + 1);
+                                        if (startQuote > 0 && endQuote > startQuote) {
+                                            ipStr = json.Substring(startQuote + 1, endQuote - startQuote - 1);
                                         }
                                     }
 
-                                    // Всегда извлекаем страну
                                     if (json.Contains("\"countryCode\":\"RU\"") || json.Contains("\"country\":\"Russia\"")) {
                                         isRuIp = true;
                                         countryStr = "Россия";
@@ -3921,19 +4057,16 @@ namespace ProjectXO {
 
                                     if (ipStr != "Не определен") break;
                                 }
-                            } catch {
-                                // Пробуем следующий шлюз
-                            }
+                            } catch {}
                         }
 
-                        if (countryStr == "Неизвестно") {
+                        if (countryStr == "Россия" || countryStr == "Беларусь") {
                             isRuIp = true;
-                            countryStr = "Россия";
                         }
                         doneIp.Set();
                     });
 
-                    // 2. Реальное измерение сетевого пинга к api.anthropic.com
+                    // 2. Пинг api.anthropic.com
                     ThreadPool.QueueUserWorkItem((_) => {
                         Stopwatch sw = Stopwatch.StartNew();
                         try {
@@ -3941,7 +4074,7 @@ namespace ProjectXO {
                             req.Proxy = null;
                             req.Timeout = 2500;
                             req.Method = "HEAD";
-                            req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/5.2";
+                            req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/6.0";
                             using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) {
                                 sw.Stop();
                                 pingMs = (int)sw.ElapsedMilliseconds;
@@ -3952,7 +4085,7 @@ namespace ProjectXO {
                                 pingMs = (int)sw.ElapsedMilliseconds;
                                 try { we.Response.Close(); } catch {}
                             } else {
-                                pingMs = 0; // Блокировка / Таймаут
+                                pingMs = 0;
                             }
                         } catch {
                             sw.Stop();
@@ -3962,112 +4095,146 @@ namespace ProjectXO {
                         }
                     });
 
-                    // 3. Реальный опрос сетевых адаптеров на наличие туннеля VPN
-                    bool vpnActive = false;
+                    // 3. Проверка маршрута к Anthropic (Bug 2 & 3)
+                    string bestAdapterName, bestDesc;
+                    bool isVpnRoute;
+                    uint bestIfIndex;
+                    CheckAnthropicRouting(out bestAdapterName, out bestDesc, out isVpnRoute, out bestIfIndex);
+
+                    bool hasAnyVpnUp = false;
                     try {
                         foreach (NetworkInterface nic in NetworkInterface.GetAllNetworkInterfaces()) {
-                            if (nic.OperationalStatus == OperationalStatus.Up) {
-                                string desc = nic.Description.ToLowerInvariant();
-                                string name = nic.Name.ToLowerInvariant();
-                                if (desc.Contains("wintun") || desc.Contains("wireguard") || desc.Contains("tap") ||
-                                    desc.Contains("tun") || name.Contains("wwan99") || name.Contains("vpn") ||
-                                    desc.Contains("openvpn") || desc.Contains("tailscale") || desc.Contains("amnezia")) {
-                                    vpnActive = true;
-                                    break;
-                                }
+                            if (nic.OperationalStatus == OperationalStatus.Up && IsVpnInterface(nic)) {
+                                hasAnyVpnUp = true;
+                                break;
                             }
                         }
                     } catch {}
 
                     WaitHandle.WaitAll(new WaitHandle[] { doneIp, donePing }, 2800);
 
-                    // 4. Реальное чтение правил Брандмауэра WFP из системного реестра
+                    // 4. Правила WFP в реестре
                     int fwRulesCount = GetFirewallRuleCountFromRegistry();
 
-                    // 5. Реальная проверка активных утечек IPv6
+                    // 5. Проверка IPv6 утечки на физических интерфейсах (Bug 4)
                     bool hasActiveIpv6Leak = false;
+                    string leakNic = "";
+                    string leakIp = "";
                     try {
                         foreach (NetworkInterface nic in NetworkInterface.GetAllNetworkInterfaces()) {
                             if (nic.OperationalStatus == OperationalStatus.Up &&
-                                nic.NetworkInterfaceType != NetworkInterfaceType.Loopback) {
-                                string d = nic.Description.ToLowerInvariant();
-                                if (!d.Contains("wintun") && !d.Contains("wireguard") && !d.Contains("tap") &&
-                                    !d.Contains("tun") && !d.Contains("vpn") && !d.Contains("amnezia")) {
-                                    IPInterfaceProperties props = nic.GetIPProperties();
-                                    foreach (UnicastIPAddressInformation u in props.UnicastAddresses) {
-                                        if (u.Address.AddressFamily == AddressFamily.InterNetworkV6 &&
-                                            !u.Address.IsIPv6LinkLocal && !u.Address.IsIPv6SiteLocal) {
-                                            hasActiveIpv6Leak = true;
-                                            break;
-                                        }
+                                nic.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
+                                !IsVpnInterface(nic)) {
+                                IPInterfaceProperties props = nic.GetIPProperties();
+                                foreach (UnicastIPAddressInformation u in props.UnicastAddresses) {
+                                    if (u.Address.AddressFamily == AddressFamily.InterNetworkV6 &&
+                                        !u.Address.IsIPv6LinkLocal && !u.Address.IsIPv6SiteLocal) {
+                                        hasActiveIpv6Leak = true;
+                                        leakNic = nic.Name;
+                                        leakIp = u.Address.ToString();
+                                        break;
                                     }
                                 }
                             }
                         }
                     } catch {}
 
-                    if (hasActiveIpv6Leak) {
-                        Log("SECURITY", "Внимание: обнаружен глобальный IPv6 на физическом адаптере. Рекомендуется изоляция.", Color.FromArgb(248, 113, 113));
-                    }
+                    // 6. Проверка DNS-серверов (Bug 7)
+                    List<string> dnsList = new List<string>();
+                    try {
+                        foreach (NetworkInterface nic in NetworkInterface.GetAllNetworkInterfaces()) {
+                            if (nic.OperationalStatus == OperationalStatus.Up) {
+                                IPInterfaceProperties props = nic.GetIPProperties();
+                                foreach (IPAddress dns in props.DnsAddresses) {
+                                    if (dns.AddressFamily == AddressFamily.InterNetwork) {
+                                        string ds = dns.ToString();
+                                        if (!dnsList.Contains(ds)) dnsList.Add(ds);
+                                    }
+                                }
+                            }
+                        }
+                    } catch {}
 
-                    // 6. Итоговое обновление UI на основе реальных измерений
+                    // 7. Обновление UI
                     SafeInvoke(() => {
                         CurrentPing = pingMs;
                         CurrentIp = ipStr;
                         CurrentCountry = countryStr;
 
-                        if (isRuIp || !vpnActive) {
-                            string reason = isRuIp
-                                ? ("Обнаружен IP адрес " + countryStr + " (" + ipStr + ")")
-                                : "Адаптер VPN не подключен или соединение разорвано";
+                        // Обновление строки маршрута в Диагностике
+                        if (_lblWarpRouteVal != null) {
+                            if (isVpnRoute) {
+                                string shortDesc = bestDesc.Length > 24 ? (bestDesc.Substring(0, 22) + "..") : bestDesc;
+                                _lblWarpRouteVal.Text = bestAdapterName + " (" + shortDesc + ") — Маршрутизация активна";
+                                _lblWarpRouteVal.ForeColor = Color.FromArgb(52, 211, 153);
+                            } else {
+                                _lblWarpRouteVal.Text = bestAdapterName + " — ВНИМАНИЕ: Маршрут мимо VPN!";
+                                _lblWarpRouteVal.ForeColor = Color.FromArgb(248, 113, 113);
+                            }
+                        }
 
-                            SetProtectionUIState(ProtectionState.BlockedNoVpn, reason);
+                        if (!hasAnyVpnUp) {
+                            SetProtectionUIState(ProtectionState.BlockedNoVpn, "VPN-соединение не обнаружено");
                             if (_lblWarpIpVal != null) {
-                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") — Риск блокировки";
+                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") [Опасность утечки]";
                                 _lblWarpIpVal.ForeColor = Color.FromArgb(248, 113, 113);
                             }
-                            Log("SECURITY", "Аудит завершен: IP " + ipStr + " (" + countryStr + "). VPN: " + (vpnActive ? "Да" : "НЕТ") + ". Вход в Claude ЗАБЛОКИРОВАН.", Color.FromArgb(248, 113, 113));
+                            Log("SECURITY", "АУДИТ СЕТИ: Активный VPN-адаптер не найден. Запуск Claude заблокирован во избежание утечки реального IP.", Color.FromArgb(248, 113, 113));
+                        } else if (!isVpnRoute) {
+                            SetProtectionUIState(ProtectionState.BlockedNoVpn, "Маршрут 0.0.0.0/0 направлен мимо VPN (" + bestAdapterName + ")");
+                            if (_lblWarpIpVal != null) {
+                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") [Мимо VPN]";
+                                _lblWarpIpVal.ForeColor = Color.FromArgb(248, 113, 113);
+                            }
+                            Log("SECURITY", "ВНИМАНИЕ: VPN запущен, но маршрут к Anthropic идет через физический адаптер '" + bestAdapterName + "'. Запуск заблокирован.", Color.FromArgb(248, 113, 113));
+                        } else if (isRuIp) {
+                            SetProtectionUIState(ProtectionState.BlockedNoVpn, "Внешний IP из " + countryStr + " (" + ipStr + ")");
+                            if (_lblWarpIpVal != null) {
+                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") [Геоблокировка]";
+                                _lblWarpIpVal.ForeColor = Color.FromArgb(248, 113, 113);
+                            }
+                            Log("SECURITY", "ПРЕДУПРЕЖДЕНИЕ: Внешний IP принадлежит " + countryStr + " (" + ipStr + "). Claude будет заблокирован Anthropic.", Color.FromArgb(248, 113, 113));
+                        } else if (hasActiveIpv6Leak) {
+                            SetProtectionUIState(ProtectionState.BlockedLeaking, "Утечка IPv6 на адаптере " + leakNic);
+                            Log("SECURITY", "УТЕЧКА IPV6: На физическом адаптере '" + leakNic + "' обнаружен глобальный адрес " + leakIp + ". Требуется KillSwitch.", Color.FromArgb(248, 113, 113));
                         } else {
                             SetProtectionUIState(ProtectionState.Protected, "Защита активна");
                             if (_lblWarpIpVal != null) {
                                 _lblWarpIpVal.Text = ipStr + " (" + countryStr + ")";
                                 _lblWarpIpVal.ForeColor = Color.FromArgb(52, 211, 153);
                             }
-                            Log("SECURITY", "Аудит завершен: туннель активен (" + countryStr + ", " + ipStr + ", " + pingMs + " мс). Безопасный запуск Claude РАЗРЕШЕН.", Color.FromArgb(52, 211, 153));
+                            Log("SECURITY", "АУДИТ СЕТИ: Трафик изолирован через " + bestAdapterName + " (" + countryStr + ", " + ipStr + ", " + pingMs + " мс). Запуск Claude разрешен.", Color.FromArgb(52, 211, 153));
                         }
 
-                        // WFP
+                        // Проверка DNS
+                        if (dnsList.Count > 0) {
+                            Log("DNS", "Активные DNS-серверы: " + string.Join(", ", dnsList.ToArray()) + " (DoH 1.1.1.1 активен).", Color.FromArgb(148, 163, 184));
+                        }
+
+                        // WFP счетчик
                         if (fwRulesCount > 0) {
                             if (_lblWarpWfpVal != null) {
-                                _lblWarpWfpVal.Text = "Активен (" + fwRulesCount + " правил внедрено)";
+                                _lblWarpWfpVal.Text = "Активна (" + fwRulesCount + " правил ядра)";
                                 _lblWarpWfpVal.ForeColor = Color.FromArgb(52, 211, 153);
                             }
                         } else {
                             if (_lblWarpWfpVal != null) {
-                                _lblWarpWfpVal.Text = "Правила не внедрены (нажмите для установки)";
+                                _lblWarpWfpVal.Text = "Не активна (нажмите для применения)";
                                 _lblWarpWfpVal.ForeColor = Color.FromArgb(248, 113, 113);
                             }
                         }
 
-                        // Cloudflare / Anthropic
-                        if (pingMs > 0) {
-                            if (_lblWarpAnthropicVal != null) {
-                                _lblWarpAnthropicVal.Text = pingMs + " мс (TLS 1.2/1.3 прямой шлюз)";
-                                _lblWarpAnthropicVal.ForeColor = Color.FromArgb(52, 211, 153);
-                            }
-                        } else {
-                            if (_lblWarpAnthropicVal != null) {
-                                _lblWarpAnthropicVal.Text = "Блокировка провайдером (Тайм-аут)";
-                                _lblWarpAnthropicVal.ForeColor = Color.FromArgb(248, 113, 113);
-                            }
+                        if (_lblWarpAnthropicVal != null) {
+                            _lblWarpAnthropicVal.Text = pingMs > 0 ? (pingMs + " мс (TLS 1.2/1.3)") : "Таймаут соединения";
+                            _lblWarpAnthropicVal.ForeColor = (pingMs > 0 && !isRuIp && isVpnRoute) ? Color.FromArgb(52, 211, 153) : Color.FromArgb(248, 113, 113);
                         }
 
-                        if (_badgeTunnelStatus != null) {
-                            _badgeTunnelStatus.Invalidate();
-                        }
+                        if (_badgeTunnelStatus != null) _badgeTunnelStatus.Invalidate();
                     });
                 } catch (Exception ex) {
-                    Log("ERR", "Ошибка выполнения аудита: " + ex.Message, Color.FromArgb(239, 68, 68));
+                    SafeInvoke(() => {
+                        Log("ERR", "Ошибка при выполнении сетевого аудита: " + ex.Message, Color.FromArgb(239, 68, 68));
+                    });
                 }
             });
         }
@@ -4093,34 +4260,122 @@ namespace ProjectXO {
             return count;
         }
 
+        // Bug 1, 3, 4, 6: Watchdog с проверкой маршрута, утечек IPv6 и целостности WFP
         private void StartWatchdog() {
             _watchdogTimer = new System.Windows.Forms.Timer();
             _watchdogTimer.Interval = 1500;
             _watchdogTimer.Tick += (s, e) => {
+                if (_isSuspended) return;
+                _watchdogTickCount++;
+
                 ThreadPool.QueueUserWorkItem((st) => {
-                    bool vpnUp = false;
+                    // 1. Проверка маршрута ядра к Anthropic (Bug 2 & 3)
+                    string bestAdapterName, bestDesc;
+                    bool isVpnRoute;
+                    uint bestIfIndex;
+                    CheckAnthropicRouting(out bestAdapterName, out bestDesc, out isVpnRoute, out bestIfIndex);
+
+                    bool anyVpnUp = false;
                     try {
                         foreach (NetworkInterface nic in NetworkInterface.GetAllNetworkInterfaces()) {
-                            if (nic.OperationalStatus == OperationalStatus.Up) {
-                                string desc = nic.Description.ToLowerInvariant();
-                                string name = nic.Name.ToLowerInvariant();
-                                if (desc.Contains("wintun") || desc.Contains("wireguard") || desc.Contains("tap") ||
-                                    desc.Contains("tun") || name.Contains("wwan99") || name.Contains("vpn") ||
-                                    desc.Contains("openvpn") || desc.Contains("tailscale") || desc.Contains("amnezia")) {
-                                    vpnUp = true;
-                                    break;
-                                }
+                            if (nic.OperationalStatus == OperationalStatus.Up && IsVpnInterface(nic)) {
+                                anyVpnUp = true;
+                                break;
                             }
                         }
                     } catch {}
 
-                    if (!vpnUp && _currentState == ProtectionState.Protected) {
+                    // 2. KillSwitch при обрыве туннеля или перенаправлении маршрута в обход VPN
+                    if ((!anyVpnUp || !isVpnRoute) && _currentState == ProtectionState.Protected) {
                         KillClaudeProcessesInMemory();
 
                         SafeInvoke(() => {
-                            SetProtectionUIState(ProtectionState.BlockedLeaking, "Аварийный сброс: VPN-туннель был разорван!");
+                            string reason = !anyVpnUp
+                                ? "Обрыв VPN: туннель неожиданно отключился!"
+                                : ("Маршрут ушел в обход VPN через " + bestAdapterName);
+                            SetProtectionUIState(ProtectionState.BlockedLeaking, reason);
                         });
-                        Log("KILLSWITCH", "Аварийный перехват: туннель разорван во время работы. Процессы Claude завершены в памяти.", Color.FromArgb(248, 113, 113));
+                        Log("KILLSWITCH", string.Format("СРОЧНАЯ БЛОКИРОВКА: {0}. Все запущенные процессы Claude немедленно завершены.",
+                            !anyVpnUp ? "VPN-туннель разорван" : ("Маршрут направлен мимо туннеля через " + bestAdapterName)), Color.FromArgb(248, 113, 113));
+                    }
+
+                    // 3. Мониторинг IPv6 утечки в реальном времени (Bug 4)
+                    bool hasIpv6Leak = false;
+                    string leakNic = "";
+                    string leakIp = "";
+                    try {
+                        foreach (NetworkInterface nic in NetworkInterface.GetAllNetworkInterfaces()) {
+                            if (nic.OperationalStatus == OperationalStatus.Up &&
+                                nic.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
+                                !IsVpnInterface(nic)) {
+                                IPInterfaceProperties props = nic.GetIPProperties();
+                                foreach (UnicastIPAddressInformation u in props.UnicastAddresses) {
+                                    if (u.Address.AddressFamily == AddressFamily.InterNetworkV6 &&
+                                        !u.Address.IsIPv6LinkLocal && !u.Address.IsIPv6SiteLocal) {
+                                        hasIpv6Leak = true;
+                                        leakNic = nic.Name;
+                                        leakIp = u.Address.ToString();
+                                        break;
+                                    }
+                                }
+                            }
+                            if (hasIpv6Leak) break;
+                        }
+                    } catch {}
+
+                    if (hasIpv6Leak) {
+                        KillClaudeProcessesInMemory();
+                        SafeInvoke(() => {
+                            SetProtectionUIState(ProtectionState.BlockedLeaking, "Утечка IPv6 на адаптере " + leakNic);
+                        });
+                        Log("IPV6-LEAK", string.Format("УТЕЧКА IPV6: Обнаружен глобальный адрес {0} на '{1}'. Запущен KillSwitch и деактивация ms_tcpip6.", leakIp, leakNic), Color.FromArgb(248, 113, 113));
+                        try {
+                            ProcessStartInfo psi = new ProcessStartInfo {
+                                FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe"),
+                                Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"Disable-NetAdapterBinding -Name '" + leakNic.Replace("'", "") + "' -ComponentId ms_tcpip6 -Confirm:$false\"",
+                                CreateNoWindow = true,
+                                UseShellExecute = false,
+                                WindowStyle = ProcessWindowStyle.Hidden
+                            };
+                            Process.Start(psi);
+                        } catch {}
+                    }
+
+                    // 4. Проверка целостности правил WFP и пересканирование адаптеров (Bug 1 & 6)
+                    // Выполняется каждые ~30 секунд (20 тиков * 1.5с)
+                    if (_watchdogTickCount % 20 == 0) {
+                        int fwCount = GetFirewallRuleCountFromRegistry();
+                        int physicalCount = 0;
+                        bool missingAdapterRules = false;
+                        string missingName = "";
+                        try {
+                            foreach (NetworkInterface nic in NetworkInterface.GetAllNetworkInterfaces()) {
+                                if (nic.OperationalStatus == OperationalStatus.Up &&
+                                    nic.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
+                                    !IsVpnInterface(nic)) {
+                                    physicalCount++;
+                                    string sanitized = System.Text.RegularExpressions.Regex.Replace(nic.Name, @"[^a-zA-Z0-9]", "_");
+                                    if (!HasFirewallRulesForAdapter(sanitized)) {
+                                        missingAdapterRules = true;
+                                        missingName = nic.Name;
+                                        break;
+                                    }
+                                }
+                            }
+                        } catch {}
+
+                        if (physicalCount > 0 && fwCount == 0) {
+                            Log("INTEGRITY", "ВНИМАНИЕ: Правила WFP сброшены внешним антивирусом или политикой безопасности. Восстановление изоляции...", Color.FromArgb(248, 113, 113));
+                            SafeInvoke(() => {
+                                if (_trayIcon != null) {
+                                    _trayIcon.ShowBalloonTip(3000, "ClaudeBarrier", "Правила файрвола были сброшены. Выполняется автоматическое восстановление защиты.", ToolTipIcon.Warning);
+                                }
+                            });
+                            ApplyFirewallRulesSilent(false);
+                        } else if (missingAdapterRules) {
+                            Log("NETWORK", string.Format("СЕТЬ: Обнаружен физический адаптер '{0}' без правил изоляции. Применение WFP...", missingName), Color.FromArgb(251, 191, 36));
+                            ApplyFirewallRulesSilent(false);
+                        }
                     }
                 });
             };
@@ -4255,7 +4510,7 @@ namespace ProjectXO {
                         "$ErrorActionPreference = 'SilentlyContinue'; " +
                         "Get-NetFirewallRule | Where-Object { $_.Name -like 'Claude-Shield*' -or $_.DisplayName -like 'Claude-Shield*' } | Remove-NetFirewallRule; " +
                         "Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -like 'Claude-Shield*' -or (Get-ItemPropertyValue 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' $_.Name) -like '*Claude-Shield*' } | ForEach-Object { Remove-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' -Name $_.Name }; " +
-                        "$adapters = @(Get-NetAdapter | Where-Object { $_.InterfaceDescription -notmatch 'Wintun|WireGuard|TAP|TUN|Virtual|Tailscale|Amnezia' -and ($_.PhysicalMediaType -match '802.11|802.3|Native 802.11' -or $_.Name -match 'Wi-Fi|Ethernet|Беспроводная') } | Select-Object -ExpandProperty Name); " +
+                        "$adapters = @(Get-NetAdapter | Where-Object { $_.InterfaceDescription -notmatch 'Wintun|WireGuard|TAP|TUN|Virtual|Tailscale|Amnezia|WARP|Mullvad|Proton|Neko|Sing-box|Clash|v2ray|Hiddify|VPN' -and $_.Status -ne 'Disabled' } | Select-Object -ExpandProperty Name); " +
                         "$idx = 1; " +
                         "foreach ($a in $adapters) { " +
                         "  $id = ($a -replace '[^a-zA-Z0-9]','_'); " +
