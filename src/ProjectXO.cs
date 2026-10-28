@@ -3485,28 +3485,37 @@ namespace ProjectXO {
                 }
 
                 if (_trayIcon != null && _trayIcon.ContextMenu != null) {
-                    _trayIcon.ContextMenu.MenuItems[0].Text = "Статус: ПОДКЛЮЧЕНО (Защита активна)";
+                    _trayIcon.ContextMenu.MenuItems[0].Text = "Статус: Защищено (Трафик изолирован)";
                 }
             } else {
-                if (_lblStatusTitle != null) _lblStatusTitle.Text = "Отключено";
+                bool isGeoBlocked = IsAnthropicBlockedRegion(CurrentCountry, CurrentIp, msg);
+                if (_lblStatusTitle != null) {
+                    _lblStatusTitle.Text = isGeoBlocked ? "Регион не поддерживается" : "Отключено";
+                }
                 if (_lblStatusSubtitle != null) {
-                    _lblStatusSubtitle.Text = string.IsNullOrEmpty(msg)
-                        ? "Ваше интернет-подключение не защищено от блокировок Claude."
-                        : ("Ваше интернет-подключение не конфиденциально: " + msg);
+                    if (isGeoBlocked) {
+                        _lblStatusSubtitle.Text = "Выходной IP находится в неподдерживаемом регионе (" + CurrentCountry + "). Вход заблокирован во избежание бана!";
+                    } else {
+                        _lblStatusSubtitle.Text = string.IsNullOrEmpty(msg)
+                            ? "Ваше интернет-подключение не защищено. Доступ к Claude закрыт."
+                            : ("Интернет-подключение не защищено: " + msg);
+                    }
                 }
 
                 if (_btnMainCta != null) {
-                    _btnMainCta.Text = "Подключить";
-                    _btnMainCta.GradientStart = Color.FromArgb(37, 99, 235);
-                    _btnMainCta.GradientEnd = Color.FromArgb(29, 78, 216);
-                    _btnMainCta.HoverStart = Color.FromArgb(59, 130, 246);
-                    _btnMainCta.HoverEnd = Color.FromArgb(37, 99, 235);
-                    _btnMainCta.GlowColor = Color.FromArgb(80, 59, 130, 246);
+                    _btnMainCta.Text = isGeoBlocked ? "Сменить сервер VPN" : "Подключить";
+                    _btnMainCta.GradientStart = isGeoBlocked ? Color.FromArgb(220, 38, 38) : Color.FromArgb(37, 99, 235);
+                    _btnMainCta.GradientEnd = isGeoBlocked ? Color.FromArgb(185, 28, 28) : Color.FromArgb(29, 78, 216);
+                    _btnMainCta.HoverStart = isGeoBlocked ? Color.FromArgb(239, 68, 68) : Color.FromArgb(59, 130, 246);
+                    _btnMainCta.HoverEnd = isGeoBlocked ? Color.FromArgb(220, 38, 38) : Color.FromArgb(37, 99, 235);
+                    _btnMainCta.GlowColor = isGeoBlocked ? Color.FromArgb(80, 239, 68, 68) : Color.FromArgb(80, 59, 130, 246);
                     _btnMainCta.Invalidate();
                 }
 
                 if (_trayIcon != null && _trayIcon.ContextMenu != null) {
-                    _trayIcon.ContextMenu.MenuItems[0].Text = "Статус: ОТКЛЮЧЕНО (VPN не подтвержден)";
+                    _trayIcon.ContextMenu.MenuItems[0].Text = isGeoBlocked
+                        ? "Статус: Регион заблокирован (" + CurrentCountry + ")"
+                        : "Статус: Отключено (VPN не активен)";
                 }
             }
         }
@@ -3514,23 +3523,30 @@ namespace ProjectXO {
         private bool ConfirmUnsafeLaunch(string targetName) {
             if (_currentState == ProtectionState.Protected) return true;
 
-            string statusReason = (_currentState == ProtectionState.BlockedNoVpn)
-                ? "VPN-соединение не обнаружено или маршрут по умолчанию идет в обход туннеля."
-                : "Обнаружена возможная сетевая утечка или открытый маршрут к Anthropic.";
+            string statusReason = "";
+            bool isGeoBlocked = IsAnthropicBlockedRegion(CurrentCountry, CurrentIp, "");
+
+            if (isGeoBlocked) {
+                statusReason = "Ваш текущий выходной IP-адрес (" + CurrentIp + ") находится в неподдерживаемом регионе: " + CurrentCountry + ".\n\nAnthropic сразу же заблокирует доступ или забанит аккаунт при попытке входа из этого региона!";
+            } else if (CurrentPing <= 0) {
+                statusReason = "Серверы Anthropic (claude.ai) недоступны или блокируются на текущем сетевом подключении.";
+            } else {
+                statusReason = "VPN-соединение не обнаружено или маршрут по умолчанию идет в обход туннеля.";
+            }
 
             string message = string.Format(
-                "ВНИМАНИЕ: Запуск {0} заблокирован системой ClaudeBarrier!\n\n" +
-                "Причина: {1}\n\n" +
-                "Прямое обращение к серверам Anthropic без VPN раскроет ваш реальный IP-адрес интернет-провайдера, что приведет к геоблокировке аккаунта.\n\n" +
-                "• Нажмите [Да], чтобы открыть сетевые подключения Windows (ncpa.cpl) для включения VPN.\n" +
+                "ВНИМАНИЕ: Запуск {0} заблокирован системой безопасности ClaudeBarrier!\n\n" +
+                "{1}\n\n" +
+                "Решение: Переключите сервер в вашем VPN-клиенте на европейский или американский регион (Германия, Нидерланды, США).\n\n" +
+                "• Нажмите [Да], чтобы открыть сетевые подключения Windows (ncpa.cpl).\n" +
                 "• Нажмите [Нет], чтобы безопасно отменить запуск.",
                 targetName, statusReason);
 
             DialogResult res = MessageBox.Show(
                 message,
-                "ClaudeBarrier // Предотвращение утечки IP",
+                "ClaudeBarrier // Риск блокировки аккаунта",
                 MessageBoxButtons.YesNo,
-                MessageBoxIcon.Warning);
+                MessageBoxIcon.Stop);
 
             if (res == DialogResult.Yes) {
                 try {
@@ -3925,6 +3941,48 @@ namespace ProjectXO {
         }
 
         // РЕАЛЬНЫЙ СЕТЕВОЙ АУДИТ: 100% НАСТОЯЩИЕ ДАННЫЕ БЕЗ ВИЗУАЛЬНОГО СЛОПА
+        // Универсальная проверка заблокированных Anthropic регионов (РФ, РБ, Иран, Китай и др.)
+        public static bool IsAnthropicBlockedRegion(string countryStr, string ipStr, string rawJson) {
+            string c = (countryStr ?? "").Trim().ToLowerInvariant();
+            string r = (rawJson ?? "").ToLowerInvariant();
+
+            if (string.IsNullOrEmpty(c) && string.IsNullOrEmpty(r)) return false;
+
+            // 1. Проверка по 2-буквенным кодам ISO (country_code, countryCode, country)
+            string[] blockedCodes = new string[] {
+                "\"country_code\":\"ru\"", "\"country_code\": \"ru\"",
+                "\"countrycode\":\"ru\"", "\"countrycode\": \"ru\"",
+                "\"country\":\"ru\"", "\"country\": \"ru\"",
+                "\"country_code\":\"by\"", "\"country_code\": \"by\"",
+                "\"countrycode\":\"by\"", "\"countrycode\": \"by\"",
+                "\"country\":\"by\"", "\"country\": \"by\"",
+                "\"country_code\":\"cn\"", "\"country_code\": \"cn\"",
+                "\"country_code\":\"ir\"", "\"country_code\": \"ir\"",
+                "\"country_code\":\"kp\"", "\"country_code\": \"kp\"",
+                "\"country_code\":\"cu\"", "\"country_code\": \"cu\"",
+                "\"country_code\":\"sy\"", "\"country_code\": \"sy\""
+            };
+            foreach (string code in blockedCodes) {
+                if (r.Contains(code)) return true;
+            }
+
+            // 2. Проверка по названиям стран (рус/англ)
+            string[] blockedKeywords = new string[] {
+                "russia", "russian federation", "russian", "россия", "российская федерация", "рф", "ru",
+                "belarus", "беларусь", "белоруссия", "by",
+                "china", "китай", "cn",
+                "iran", "иран", "ir",
+                "north korea", "северная корея", "kp",
+                "cuba", "куба", "cu",
+                "syria", "сирия", "sy"
+            };
+            foreach (string kw in blockedKeywords) {
+                if (c == kw || c.Contains(kw)) return true;
+            }
+
+            return false;
+        }
+
         // Bug 2: Универсальное определение VPN по типу адаптера и описанию
         public static bool IsVpnInterface(NetworkInterface nic) {
             if (nic == null) return false;
@@ -4003,29 +4061,34 @@ namespace ProjectXO {
 
                     string ipStr = "Не определен";
                     string countryStr = "Неизвестно";
-                    bool isRuIp = false;
+                    string rawGeoJson = "";
+                    bool isBlockedRegion = false;
+                    bool isGeoBlockedByEndpoint = false;
                     int pingMs = 0;
 
-                    // 1. Определение внешнего IP через Cloudflare DoH / Geo
+                    // 1. Определение внешнего IP и геопозиции
                     ThreadPool.QueueUserWorkItem((_) => {
                         string[] geoEndpoints = new string[] {
-                            "https://speed.cloudflare.com/meta",
-                            "https://ipapi.co/json/",
-                            "https://ipwho.is/"
+                            "https://ipwho.is/",
+                            "https://api.ipify.org?format=json",
+                            "https://speed.cloudflare.com/meta"
                         };
 
                         foreach (string url in geoEndpoints) {
                             try {
                                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                                 req.Proxy = null;
-                                req.Timeout = 2800;
-                                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/6.0";
+                                req.Timeout = 3200;
+                                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/6.0.2";
                                 using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
-                                using (StreamReader sr = new StreamReader(resp.GetResponseStream())) {
+                                using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8)) {
                                     string json = sr.ReadToEnd();
-                                    int ipIdx = json.IndexOf("\"clientIp\":\"");
-                                    if (ipIdx < 0) ipIdx = json.IndexOf("\"ip\":\"");
+                                    rawGeoJson += " " + json;
+
+                                    // Поиск IP
+                                    int ipIdx = json.IndexOf("\"ip\":\"");
                                     if (ipIdx < 0) ipIdx = json.IndexOf("\"ip\": \"");
+                                    if (ipIdx < 0) ipIdx = json.IndexOf("\"clientIp\":\"");
 
                                     if (ipIdx > 0) {
                                         int startQuote = json.IndexOf("\"", ipIdx + 5);
@@ -4035,57 +4098,83 @@ namespace ProjectXO {
                                         }
                                     }
 
-                                    if (json.Contains("\"countryCode\":\"RU\"") || json.Contains("\"country\":\"Russia\"")) {
-                                        isRuIp = true;
-                                        countryStr = "Россия";
-                                    } else if (json.Contains("\"countryCode\":\"BY\"") || json.Contains("\"country\":\"Belarus\"")) {
-                                        isRuIp = true;
-                                        countryStr = "Беларусь";
-                                    } else {
-                                        int cIdx = json.IndexOf("\"country\":\"");
-                                        if (cIdx > 0) {
-                                            int endC = json.IndexOf("\"", cIdx + 11);
-                                            if (endC > 0) countryStr = json.Substring(cIdx + 11, endC - (cIdx + 11));
-                                        } else {
-                                            int ccIdx = json.IndexOf("\"country\": \"");
-                                            if (ccIdx > 0) {
-                                                int endCc = json.IndexOf("\"", ccIdx + 12);
-                                                if (endCc > 0) countryStr = json.Substring(ccIdx + 12, endCc - (ccIdx + 12));
-                                            }
+                                    // Поиск Country
+                                    int cIdx = json.IndexOf("\"country\":\"");
+                                    if (cIdx < 0) cIdx = json.IndexOf("\"country\": \"");
+                                    if (cIdx < 0) cIdx = json.IndexOf("\"country_name\":\"");
+                                    if (cIdx < 0) cIdx = json.IndexOf("\"country_name\": \"");
+
+                                    if (cIdx > 0) {
+                                        int startC = json.IndexOf("\"", cIdx + 9);
+                                        int endC = json.IndexOf("\"", startC + 1);
+                                        if (startC > 0 && endC > startC) {
+                                            countryStr = json.Substring(startC + 1, endC - startC - 1);
                                         }
                                     }
 
-                                    if (ipStr != "Не определен") break;
+                                    if (IsAnthropicBlockedRegion(countryStr, ipStr, json)) {
+                                        isBlockedRegion = true;
+                                    }
+
+                                    if (ipStr != "Не определен" && countryStr != "Неизвестно") break;
                                 }
                             } catch {}
                         }
 
-                        if (countryStr == "Россия" || countryStr == "Беларусь") {
-                            isRuIp = true;
+                        if (IsAnthropicBlockedRegion(countryStr, ipStr, rawGeoJson)) {
+                            isBlockedRegion = true;
                         }
                         doneIp.Set();
                     });
 
-                    // 2. Пинг api.anthropic.com
+                    // 2. Проверка доступности Anthropic и детекция редиректа на app-unavailable-in-region
                     ThreadPool.QueueUserWorkItem((_) => {
                         Stopwatch sw = Stopwatch.StartNew();
                         try {
-                            HttpWebRequest req = (HttpWebRequest)WebRequest.Create("https://api.anthropic.com");
+                            HttpWebRequest req = (HttpWebRequest)WebRequest.Create("https://claude.ai");
                             req.Proxy = null;
-                            req.Timeout = 2500;
-                            req.Method = "HEAD";
-                            req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/6.0";
+                            req.Timeout = 3500;
+                            req.AllowAutoRedirect = false; // Перехватываем 302/307 на app-unavailable-in-region
+                            req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
                             using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) {
                                 sw.Stop();
                                 pingMs = (int)sw.ElapsedMilliseconds;
+                                string loc = resp.GetResponseHeader("Location") ?? "";
+                                if (loc.IndexOf("unavailable-in-region", StringComparison.OrdinalIgnoreCase) >= 0) {
+                                    isGeoBlockedByEndpoint = true;
+                                }
                             }
                         } catch (WebException we) {
                             sw.Stop();
-                            if (we.Response != null) {
+                            HttpWebResponse wr = we.Response as HttpWebResponse;
+                            if (wr != null) {
                                 pingMs = (int)sw.ElapsedMilliseconds;
-                                try { we.Response.Close(); } catch {}
+                                string loc = wr.GetResponseHeader("Location") ?? "";
+                                if (wr.StatusCode == HttpStatusCode.Forbidden ||
+                                    loc.IndexOf("unavailable-in-region", StringComparison.OrdinalIgnoreCase) >= 0) {
+                                    isGeoBlockedByEndpoint = true;
+                                }
+                                try { wr.Close(); } catch {}
                             } else {
-                                pingMs = 0;
+                                try {
+                                    HttpWebRequest reqApi = (HttpWebRequest)WebRequest.Create("https://api.anthropic.com");
+                                    reqApi.Proxy = null;
+                                    reqApi.Timeout = 2500;
+                                    reqApi.Method = "HEAD";
+                                    reqApi.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/6.0.2";
+                                    using (HttpWebResponse respApi = (HttpWebResponse)reqApi.GetResponse()) {
+                                        pingMs = (int)sw.ElapsedMilliseconds;
+                                    }
+                                } catch (WebException we2) {
+                                    if (we2.Response != null) {
+                                        pingMs = (int)sw.ElapsedMilliseconds;
+                                        try { we2.Response.Close(); } catch {}
+                                    } else {
+                                        pingMs = 0;
+                                    }
+                                } catch {
+                                    pingMs = 0;
+                                }
                             }
                         } catch {
                             sw.Stop();
@@ -4111,7 +4200,7 @@ namespace ProjectXO {
                         }
                     } catch {}
 
-                    WaitHandle.WaitAll(new WaitHandle[] { doneIp, donePing }, 2800);
+                    WaitHandle.WaitAll(new WaitHandle[] { doneIp, donePing }, 3200);
 
                     // 4. Правила WFP в реестре
                     int fwRulesCount = GetFirewallRuleCountFromRegistry();
@@ -4139,7 +4228,7 @@ namespace ProjectXO {
                         }
                     } catch {}
 
-                    // 6. Проверка DNS-серверов (Bug 7)
+                    // 6. Проверка DNS-серверов
                     List<string> dnsList = new List<string>();
                     try {
                         foreach (NetworkInterface nic in NetworkInterface.GetAllNetworkInterfaces()) {
@@ -4187,17 +4276,26 @@ namespace ProjectXO {
                                 _lblWarpIpVal.ForeColor = Color.FromArgb(248, 113, 113);
                             }
                             Log("SECURITY", "ВНИМАНИЕ: VPN запущен, но маршрут к Anthropic идет через физический адаптер '" + bestAdapterName + "'. Запуск заблокирован.", Color.FromArgb(248, 113, 113));
-                        } else if (isRuIp) {
-                            SetProtectionUIState(ProtectionState.BlockedNoVpn, "Внешний IP из " + countryStr + " (" + ipStr + ")");
+                        } else if (isBlockedRegion || isGeoBlockedByEndpoint) {
+                            // КРИТИЧЕСКИЙ БЛОК: Выходной IP находится в РФ, РБ или заблокирован серверами Anthropic!
+                            SetProtectionUIState(ProtectionState.BlockedNoVpn, "Регион не поддерживается: " + countryStr + " (" + ipStr + ")");
                             if (_lblWarpIpVal != null) {
-                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") [Геоблокировка]";
+                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") [Блокировка Anthropic]";
                                 _lblWarpIpVal.ForeColor = Color.FromArgb(248, 113, 113);
                             }
-                            Log("SECURITY", "ПРЕДУПРЕЖДЕНИЕ: Внешний IP принадлежит " + countryStr + " (" + ipStr + "). Claude будет заблокирован Anthropic.", Color.FromArgb(248, 113, 113));
+                            Log("SECURITY", "ГЕОБЛОКИРОВКА: Выходной IP (" + ipStr + ") определен как " + countryStr + "! Серверы Anthropic блокируют этот регион. Запуск Claude заблокирован во избежание бана.", Color.FromArgb(248, 113, 113));
                         } else if (hasActiveIpv6Leak) {
                             SetProtectionUIState(ProtectionState.BlockedLeaking, "Утечка IPv6 на адаптере " + leakNic);
                             Log("SECURITY", "УТЕЧКА IPV6: На физическом адаптере '" + leakNic + "' обнаружен глобальный адрес " + leakIp + ". Требуется KillSwitch.", Color.FromArgb(248, 113, 113));
+                        } else if (pingMs <= 0) {
+                            SetProtectionUIState(ProtectionState.BlockedNoVpn, "Нет связи с серверами Anthropic (Таймаут)");
+                            if (_lblWarpIpVal != null) {
+                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") [Серверы недоступны]";
+                                _lblWarpIpVal.ForeColor = Color.FromArgb(248, 113, 113);
+                            }
+                            Log("SECURITY", "СВЯЗЬ С ANTHROPIC: Не удалось установить соединение с серверами claude.ai (таймаут сети или блокировка DNS). Запуск Claude заблокирован.", Color.FromArgb(248, 113, 113));
                         } else {
+                            // ТОЛЬКО ПРИ ВЫПОЛНЕНИИ ВСЕХ УСЛОВИЙ вход безопасен!
                             SetProtectionUIState(ProtectionState.Protected, "Защита активна");
                             if (_lblWarpIpVal != null) {
                                 _lblWarpIpVal.Text = ipStr + " (" + countryStr + ")";
@@ -4226,7 +4324,7 @@ namespace ProjectXO {
 
                         if (_lblWarpAnthropicVal != null) {
                             _lblWarpAnthropicVal.Text = pingMs > 0 ? (pingMs + " мс (TLS 1.2/1.3)") : "Таймаут соединения";
-                            _lblWarpAnthropicVal.ForeColor = (pingMs > 0 && !isRuIp && isVpnRoute) ? Color.FromArgb(52, 211, 153) : Color.FromArgb(248, 113, 113);
+                            _lblWarpAnthropicVal.ForeColor = (pingMs > 0 && !isBlockedRegion && !isGeoBlockedByEndpoint && isVpnRoute) ? Color.FromArgb(52, 211, 153) : Color.FromArgb(248, 113, 113);
                         }
 
                         if (_badgeTunnelStatus != null) _badgeTunnelStatus.Invalidate();
@@ -4285,18 +4383,19 @@ namespace ProjectXO {
                         }
                     } catch {}
 
-                    // 2. KillSwitch при обрыве туннеля или перенаправлении маршрута в обход VPN
-                    if ((!anyVpnUp || !isVpnRoute) && _currentState == ProtectionState.Protected) {
+                    // 2. KillSwitch при обрыве туннеля, перенаправлении маршрута или обнаружении блокированного региона
+                    bool isBlocked = IsAnthropicBlockedRegion(CurrentCountry, CurrentIp, "");
+                    if ((!anyVpnUp || !isVpnRoute || isBlocked) && _currentState == ProtectionState.Protected) {
                         KillClaudeProcessesInMemory();
 
                         SafeInvoke(() => {
-                            string reason = !anyVpnUp
-                                ? "Обрыв VPN: туннель неожиданно отключился!"
-                                : ("Маршрут ушел в обход VPN через " + bestAdapterName);
+                            string reason = isBlocked
+                                ? ("Выходной IP в РФ / Беларуси (" + CurrentIp + ")!")
+                                : (!anyVpnUp ? "Обрыв VPN: туннель неожиданно отключился!" : ("Маршрут ушел в обход VPN через " + bestAdapterName));
                             SetProtectionUIState(ProtectionState.BlockedLeaking, reason);
                         });
                         Log("KILLSWITCH", string.Format("СРОЧНАЯ БЛОКИРОВКА: {0}. Все запущенные процессы Claude немедленно завершены.",
-                            !anyVpnUp ? "VPN-туннель разорван" : ("Маршрут направлен мимо туннеля через " + bestAdapterName)), Color.FromArgb(248, 113, 113));
+                            isBlocked ? ("Обнаружен IP в неподдерживаемом регионе (" + CurrentCountry + ")") : (!anyVpnUp ? "VPN-туннель разорван" : ("Маршрут направлен мимо туннеля через " + bestAdapterName))), Color.FromArgb(248, 113, 113));
                     }
 
                     // 3. Мониторинг IPv6 утечки в реальном времени (Bug 4)
@@ -4342,7 +4441,6 @@ namespace ProjectXO {
                     }
 
                     // 4. Проверка целостности правил WFP и пересканирование адаптеров (Bug 1 & 6)
-                    // Выполняется каждые ~30 секунд (20 тиков * 1.5с)
                     if (_watchdogTickCount % 20 == 0) {
                         int fwCount = GetFirewallRuleCountFromRegistry();
                         int physicalCount = 0;
@@ -4381,7 +4479,6 @@ namespace ProjectXO {
             };
             _watchdogTimer.Start();
         }
-
         private void KillClaudeProcessesInMemory() {
             try {
                 foreach (Process p in Process.GetProcesses()) {
