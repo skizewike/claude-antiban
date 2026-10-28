@@ -112,7 +112,7 @@ public class VpnMonitor {
             public void run() {
                 while (isMonitoring) {
                     try {
-                        Thread.sleep(1500);
+                        Thread.sleep(3500);
                     } catch (InterruptedException ignored) {}
 
                     boolean vpn = isVpnActive();
@@ -136,7 +136,7 @@ public class VpnMonitor {
                         LogManager.log("SENTINEL", "Предупреждение: задержка шлюза " + pingMs + " мс (деградация связи).", "WARN");
                     }
 
-                    notifyListener(true, pingMs > 0 ? pingMs : 0, "Frankfurt, DE", "", degraded);
+                    notifyListener(true, pingMs > 0 ? pingMs : 0, "Защищенный туннель", "", degraded);
                 }
             }
         }).start();

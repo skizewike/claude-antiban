@@ -1274,6 +1274,24 @@ namespace ProjectXO {
         private bool _forceExit = false;
 
         // Win32 Routing Helper & Watchdog States
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        [DllImport("user32.dll")]
+        private static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+        private const uint WM_CLOSE = 0x0010;
+
         [DllImport("iphlpapi.dll", ExactSpelling = true)]
         public static extern int GetBestInterface(uint destAddr, out uint bestIfIndex);
 
@@ -1372,14 +1390,18 @@ namespace ProjectXO {
         private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e) {
             if (e.Mode == PowerModes.Suspend) {
                 _isSuspended = true;
-                KillClaudeProcessesInMemory();
+                if (_cfg.KillSwitchEnabled) {
+                    KillClaudeProcessesInMemory();
+                }
                 SafeInvoke(() => {
                     SetProtectionUIState(ProtectionState.BlockedNoVpn, "Режим сна: трафик заблокирован");
                 });
                 Log("POWER", "СИСТЕМА: Переход в спящий режим (Suspend). Сетевой трафик Claude немедленно заблокирован.", Color.FromArgb(248, 113, 113));
             } else if (e.Mode == PowerModes.Resume) {
                 _isSuspended = false;
-                KillClaudeProcessesInMemory();
+                if (_cfg.KillSwitchEnabled) {
+                    KillClaudeProcessesInMemory();
+                }
                 SafeInvoke(() => {
                     SetProtectionUIState(ProtectionState.BlockedNoVpn, "Выход из сна: ожидание VPN...");
                 });
@@ -1427,9 +1449,18 @@ namespace ProjectXO {
 
             LogItem item = new LogItem() { Time = timestamp, Category = category, Message = message, Col = color };
             lock (_logLock) {
+                if (_allLogs.Count >= 2000) {
+                    _allLogs.RemoveRange(0, 500);
+                }
                 _allLogs.Add(item);
                 try {
                     string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "project_xo.log");
+                    FileInfo fi = new FileInfo(logFile);
+                    if (fi.Exists && fi.Length > 5 * 1024 * 1024) {
+                        string oldLog = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "project_xo.old.log");
+                        if (File.Exists(oldLog)) File.Delete(oldLog);
+                        File.Move(logFile, oldLog);
+                    }
                     File.AppendAllText(logFile, line, System.Text.Encoding.UTF8);
                 } catch {}
             }
@@ -1457,6 +1488,10 @@ namespace ProjectXO {
 
         private void AppendLogToRtb(LogItem item) {
             if (_rtbLogs == null || _rtbLogs.IsDisposed) return;
+            if (_rtbLogs.TextLength > 100000) {
+                _rtbLogs.Select(0, 20000);
+                _rtbLogs.SelectedText = "";
+            }
             _rtbLogs.SelectionStart = _rtbLogs.TextLength;
             _rtbLogs.SelectionLength = 0;
             _rtbLogs.SelectionColor = Color.FromArgb(100, 116, 139);
@@ -2039,45 +2074,39 @@ namespace ProjectXO {
                 _pnlSidebar.Controls.Add(navBtn);
             }
 
-            // Нижняя кнопка обратной связи в точности как в Cloudflare One Client
+            // Нижняя минималистичная кнопка телеграм-бота поддержки
             Panel pnlFeedback = new Panel() {
-                Location = new Point(12, 618),
-                Size = new Size(194, 52),
+                Location = new Point(12, 630),
+                Size = new Size(194, 38),
                 BackColor = Color.Transparent,
                 Cursor = Cursors.Hand
             };
+            bool isFeedbackHovered = false;
             pnlFeedback.Paint += (s, pe) => {
                 Graphics g = pe.Graphics;
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
                 Rectangle r = new Rectangle(0, 0, pnlFeedback.Width - 1, pnlFeedback.Height - 1);
-                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
-                    using (SolidBrush b = new SolidBrush(Color.FromArgb(19, 22, 32))) g.FillPath(b, p);
-                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 56), 1f)) g.DrawPath(pen, p);
+                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 6)) {
+                    Color bg = isFeedbackHovered ? Color.FromArgb(24, 28, 42) : Color.FromArgb(15, 17, 25);
+                    Color border = isFeedbackHovered ? Color.FromArgb(45, 52, 74) : Color.FromArgb(28, 32, 46);
+                    using (SolidBrush b = new SolidBrush(bg)) g.FillPath(b, p);
+                    using (Pen pen = new Pen(border, 1f)) g.DrawPath(pen, p);
                 }
 
-                Rectangle iconBox = new Rectangle(8, 8, 36, 36);
-                using (GraphicsPath ip = GraphicsUtils.CreateRoundedRectangle(iconBox, 8)) {
-                    using (LinearGradientBrush igb = new LinearGradientBrush(iconBox, Color.FromArgb(2, 132, 199), Color.FromArgb(3, 105, 161), 135f)) {
-                        g.FillPath(igb, ip);
-                    }
-                }
-                GraphicsUtils.DrawChatBubbleIcon(g, new Rectangle(16, 16, 20, 20), Color.White);
+                Color iconColor = isFeedbackHovered ? Color.FromArgb(56, 189, 248) : Color.FromArgb(148, 163, 184);
+                GraphicsUtils.DrawChatBubbleIcon(g, new Rectangle(12, 10, 18, 18), iconColor);
 
-                using (Font fbFont = new Font("Segoe UI", 9.2f, FontStyle.Bold)) {
-                    using (SolidBrush fbBrush = new SolidBrush(Color.FromArgb(248, 250, 252))) {
-                        g.DrawString("ClaudeBarrier Bot", fbFont, fbBrush, 50, 9);
-                    }
-                }
-                using (Font subFont = new Font("Segoe UI", 8f)) {
-                    using (SolidBrush subBrush = new SolidBrush(Color.FromArgb(56, 189, 248))) {
-                        g.DrawString("@ClaudeBarrierBot", subFont, subBrush, 50, 28);
+                Color txtColor = isFeedbackHovered ? Color.FromArgb(248, 250, 252) : Color.FromArgb(148, 163, 184);
+                using (Font fbFont = new Font("Segoe UI", 8.8f, FontStyle.Regular)) {
+                    using (SolidBrush fbBrush = new SolidBrush(txtColor)) {
+                        g.DrawString("@ClaudeBarrierBot", fbFont, fbBrush, 36, 9);
                     }
                 }
             };
-            pnlFeedback.MouseEnter += (s, e) => pnlFeedback.BackColor = Color.FromArgb(24, 28, 42);
-            pnlFeedback.MouseLeave += (s, e) => pnlFeedback.BackColor = Color.Transparent;
+            pnlFeedback.MouseEnter += (s, e) => { isFeedbackHovered = true; pnlFeedback.Invalidate(); };
+            pnlFeedback.MouseLeave += (s, e) => { isFeedbackHovered = false; pnlFeedback.Invalidate(); };
             pnlFeedback.Click += (s, e) => ShowContactDialog();
             _pnlSidebar.Controls.Add(pnlFeedback);
         }
@@ -2619,14 +2648,7 @@ namespace ProjectXO {
             };
             page.Controls.Add(lblTitle);
 
-            Label lblSub = new Label() {
-                Text = "Модули обхода цензуры DPI и многоуровневая аппаратная изоляция трафика",
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = Color.FromArgb(148, 163, 184),
-                Location = new Point(34, 52),
-                AutoSize = true
-            };
-            page.Controls.Add(lblSub);
+            
 
             // ================= CARD 1: ZAPRET DPI BYPASS =================
             Panel cardZapret = new Panel() {
@@ -3167,14 +3189,7 @@ namespace ProjectXO {
             };
             page.Controls.Add(lblTitle);
 
-            Label lblSub = new Label() {
-                Text = "События безопасности, отклики шлюзов и телеметрия WFP в реальном времени",
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = Color.FromArgb(148, 163, 184),
-                Location = new Point(34, 52),
-                AutoSize = true
-            };
-            page.Controls.Add(lblSub);
+            
 
             // Тулбар: Единый капсульный сегментированный переключатель фильтров слева + структурированные кнопки справа
             Panel pnlToolbar = new Panel() {
@@ -3302,7 +3317,7 @@ namespace ProjectXO {
             page.Controls.Add(cardUpdate);
 
             Label lblUpdTitle = new Label() {
-                Text = "Сборка ClaudeBarrier v6.0.1 • Канал релизов GitHub",
+                Text = "Проверка обновлений",
                 Font = new Font("Segoe UI", 9.2f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(248, 250, 252),
                 Location = new Point(56, 10),
@@ -3376,7 +3391,7 @@ namespace ProjectXO {
 
             ThreadPool.QueueUserWorkItem((st) => {
                 try {
-                    ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; // Tls12
+                    ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288 | SecurityProtocolType.Tls12;
                     HttpWebRequest req = (HttpWebRequest)WebRequest.Create("https://github.com/skizewike/claude-antiban/releases/latest");
                     req.Method = "HEAD";
                     req.UserAgent = "ClaudeBarrier-Client/6.0.2";
@@ -3853,7 +3868,7 @@ namespace ProjectXO {
                     req.Proxy = null;
                     req.Accept = "application/dns-json";
                     req.Timeout = 2500;
-                    req.UserAgent = "ClaudeBarrier-DoH/5.5";
+                    req.UserAgent = "ClaudeBarrier-DoH/6.0.2";
 
                     using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) {
                         sw.Stop();
@@ -3966,18 +3981,24 @@ namespace ProjectXO {
                 if (r.Contains(code)) return true;
             }
 
-            // 2. Проверка по названиям стран (рус/англ)
-            string[] blockedKeywords = new string[] {
-                "russia", "russian federation", "russian", "россия", "российская федерация", "рф", "ru",
-                "belarus", "беларусь", "белоруссия", "by",
-                "china", "китай", "cn",
-                "iran", "иран", "ir",
-                "north korea", "северная корея", "kp",
-                "cuba", "куба", "cu",
-                "syria", "сирия", "sy"
+            // 2. Проверка по 2-буквенным кодам страны (строгое равенство)
+            string[] blockedExactCodes = new string[] { "ru", "by", "cn", "ir", "kp", "cu", "sy" };
+            foreach (string code in blockedExactCodes) {
+                if (c == code) return true;
+            }
+
+            // 3. Проверка по полным названиям стран (рус/англ)
+            string[] blockedCountryNames = new string[] {
+                "russia", "russian federation", "россия", "российская федерация", "рф",
+                "belarus", "беларусь", "белоруссия",
+                "china", "китай",
+                "iran", "иран",
+                "north korea", "северная корея",
+                "cuba", "куба",
+                "syria", "сирия"
             };
-            foreach (string kw in blockedKeywords) {
-                if (c == kw || c.Contains(kw)) return true;
+            foreach (string name in blockedCountryNames) {
+                if (c == name || c.Contains(name)) return true;
             }
 
             return false;
@@ -4150,8 +4171,7 @@ namespace ProjectXO {
                             if (wr != null) {
                                 pingMs = (int)sw.ElapsedMilliseconds;
                                 string loc = wr.GetResponseHeader("Location") ?? "";
-                                if (wr.StatusCode == HttpStatusCode.Forbidden ||
-                                    loc.IndexOf("unavailable-in-region", StringComparison.OrdinalIgnoreCase) >= 0) {
+                                if (loc.IndexOf("unavailable-in-region", StringComparison.OrdinalIgnoreCase) >= 0) {
                                     isGeoBlockedByEndpoint = true;
                                 }
                                 try { wr.Close(); } catch {}
@@ -4265,14 +4285,14 @@ namespace ProjectXO {
                         if (!hasAnyVpnUp) {
                             SetProtectionUIState(ProtectionState.BlockedNoVpn, "VPN-соединение не обнаружено");
                             if (_lblWarpIpVal != null) {
-                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") [Опасность утечки]";
+                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") • " + bestAdapterName + " [Опасность утечки]";
                                 _lblWarpIpVal.ForeColor = Color.FromArgb(248, 113, 113);
                             }
                             Log("SECURITY", "АУДИТ СЕТИ: Активный VPN-адаптер не найден. Запуск Claude заблокирован во избежание утечки реального IP.", Color.FromArgb(248, 113, 113));
                         } else if (!isVpnRoute) {
                             SetProtectionUIState(ProtectionState.BlockedNoVpn, "Маршрут 0.0.0.0/0 направлен мимо VPN (" + bestAdapterName + ")");
                             if (_lblWarpIpVal != null) {
-                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") [Мимо VPN]";
+                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") • " + bestAdapterName + " [Мимо VPN]";
                                 _lblWarpIpVal.ForeColor = Color.FromArgb(248, 113, 113);
                             }
                             Log("SECURITY", "ВНИМАНИЕ: VPN запущен, но маршрут к Anthropic идет через физический адаптер '" + bestAdapterName + "'. Запуск заблокирован.", Color.FromArgb(248, 113, 113));
@@ -4280,7 +4300,7 @@ namespace ProjectXO {
                             // КРИТИЧЕСКИЙ БЛОК: Выходной IP находится в РФ, РБ или заблокирован серверами Anthropic!
                             SetProtectionUIState(ProtectionState.BlockedNoVpn, "Регион не поддерживается: " + countryStr + " (" + ipStr + ")");
                             if (_lblWarpIpVal != null) {
-                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") [Блокировка Anthropic]";
+                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") • " + bestAdapterName + " [Блокировка Anthropic]";
                                 _lblWarpIpVal.ForeColor = Color.FromArgb(248, 113, 113);
                             }
                             Log("SECURITY", "ГЕОБЛОКИРОВКА: Выходной IP (" + ipStr + ") определен как " + countryStr + "! Серверы Anthropic блокируют этот регион. Запуск Claude заблокирован во избежание бана.", Color.FromArgb(248, 113, 113));
@@ -4290,7 +4310,7 @@ namespace ProjectXO {
                         } else if (pingMs <= 0) {
                             SetProtectionUIState(ProtectionState.BlockedNoVpn, "Нет связи с серверами Anthropic (Таймаут)");
                             if (_lblWarpIpVal != null) {
-                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") [Серверы недоступны]";
+                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") • " + bestAdapterName + " [Серверы недоступны]";
                                 _lblWarpIpVal.ForeColor = Color.FromArgb(248, 113, 113);
                             }
                             Log("SECURITY", "СВЯЗЬ С ANTHROPIC: Не удалось установить соединение с серверами claude.ai (таймаут сети или блокировка DNS). Запуск Claude заблокирован.", Color.FromArgb(248, 113, 113));
@@ -4323,7 +4343,7 @@ namespace ProjectXO {
                         }
 
                         if (_lblWarpAnthropicVal != null) {
-                            _lblWarpAnthropicVal.Text = pingMs > 0 ? (pingMs + " мс (TLS 1.2/1.3)") : "Таймаут соединения";
+                            _lblWarpAnthropicVal.Text = pingMs > 0 ? (pingMs + " мс") : "Таймаут соединения";
                             _lblWarpAnthropicVal.ForeColor = (pingMs > 0 && !isBlockedRegion && !isGeoBlockedByEndpoint && isVpnRoute) ? Color.FromArgb(52, 211, 153) : Color.FromArgb(248, 113, 113);
                         }
 
@@ -4366,6 +4386,10 @@ namespace ProjectXO {
                 if (_isSuspended) return;
                 _watchdogTickCount++;
 
+                if (_currentState != ProtectionState.Protected && _cfg.KillSwitchEnabled) {
+                    KillBrowserClaudeSessions();
+                }
+
                 ThreadPool.QueueUserWorkItem((st) => {
                     // 1. Проверка маршрута ядра к Anthropic (Bug 2 & 3)
                     string bestAdapterName, bestDesc;
@@ -4386,7 +4410,9 @@ namespace ProjectXO {
                     // 2. KillSwitch при обрыве туннеля, перенаправлении маршрута или обнаружении блокированного региона
                     bool isBlocked = IsAnthropicBlockedRegion(CurrentCountry, CurrentIp, "");
                     if ((!anyVpnUp || !isVpnRoute || isBlocked) && _currentState == ProtectionState.Protected) {
-                        KillClaudeProcessesInMemory();
+                        if (_cfg.KillSwitchEnabled) {
+                            KillClaudeProcessesInMemory();
+                        }
 
                         SafeInvoke(() => {
                             string reason = isBlocked
@@ -4423,7 +4449,9 @@ namespace ProjectXO {
                     } catch {}
 
                     if (hasIpv6Leak) {
-                        KillClaudeProcessesInMemory();
+                        if (_cfg.KillSwitchEnabled) {
+                            KillClaudeProcessesInMemory();
+                        }
                         SafeInvoke(() => {
                             SetProtectionUIState(ProtectionState.BlockedLeaking, "Утечка IPv6 на адаптере " + leakNic);
                         });
@@ -4479,16 +4507,109 @@ namespace ProjectXO {
             };
             _watchdogTimer.Start();
         }
+        private static readonly string[] BrowserProcessNames = new string[] {
+            "chrome", "msedge", "firefox", "brave", "opera", "opera_gx", "vivaldi",
+            "browser", "yandex", "whale", "waterfox", "librewolf", "zen", "thorium",
+            "chromium", "chrome_proxy", "msedge_proxy"
+        };
+
+        private static bool IsBrowserProcess(string procName) {
+            if (string.IsNullOrEmpty(procName)) return false;
+            string p = procName.ToLowerInvariant();
+            for (int i = 0; i < BrowserProcessNames.Length; i++) {
+                if (p == BrowserProcessNames[i]) return true;
+            }
+            return false;
+        }
+
+        private void KillBrowserClaudeSessions() {
+            if (!_cfg.KillSwitchEnabled) return;
+            try {
+                uint currentPid = (uint)Process.GetCurrentProcess().Id;
+                List<IntPtr> windowsToClose = new List<IntPtr>();
+                List<string> closedDetails = new List<string>();
+
+                EnumWindows((hWnd, lParam) => {
+                    try {
+                        if (!IsWindowVisible(hWnd)) return true;
+
+                        uint pid;
+                        GetWindowThreadProcessId(hWnd, out pid);
+                        if (pid == currentPid || pid == 0) return true;
+
+                        StringBuilder sb = new StringBuilder(512);
+                        GetWindowText(hWnd, sb, sb.Capacity);
+                        string title = sb.ToString().Trim();
+                        if (string.IsNullOrEmpty(title)) return true;
+
+                        string tLower = title.ToLowerInvariant();
+                        if (tLower.Contains("claudebarrier") || tLower.Contains("project xo") || tLower.Contains("anti-ban barrier")) return true;
+
+                        string procName = "";
+                        try {
+                            using (Process p = Process.GetProcessById((int)pid)) {
+                                procName = p.ProcessName.ToLowerInvariant();
+                            }
+                        } catch {}
+
+                        bool isMatch = false;
+                        if (tLower.Contains("claude.ai") || tLower.Contains("app.claude.ai")) {
+                            isMatch = true;
+                        } else if (IsBrowserProcess(procName)) {
+                            bool isDocOrSearch = tLower.Contains("reddit") || tLower.Contains("github") || 
+                                                 tLower.Contains("google") || tLower.Contains("yandex") || 
+                                                 tLower.Contains("youtube") || tLower.Contains("habr") || 
+                                                 tLower.Contains("stack overflow") || tLower.Contains("docs.anthropic");
+                            if (!isDocOrSearch) {
+                                if (tLower == "claude" || 
+                                    tLower.StartsWith("sign in - claude") || tLower.StartsWith("log in - claude") ||
+                                    tLower.EndsWith(" - claude") || tLower.EndsWith(" — claude") || tLower.EndsWith(" – claude") ||
+                                    tLower.StartsWith("claude: ") || tLower.Contains("chat with claude")) {
+                                    isMatch = true;
+                                }
+                            }
+                        }
+
+                        if (isMatch) {
+                            windowsToClose.Add(hWnd);
+                            closedDetails.Add(string.Format("'{0}' ({1})", title, procName));
+                        }
+                    } catch {}
+                    return true;
+                }, IntPtr.Zero);
+
+                foreach (IntPtr hWnd in windowsToClose) {
+                    try {
+                        PostMessage(hWnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+                    } catch {}
+                }
+
+                if (closedDetails.Count > 0) {
+                    SafeInvoke(() => {
+                        foreach (string det in closedDetails) {
+                            Log("KILLSWITCH", "ОБНАРУЖЕНА СЕССИЯ В БРАУЗЕРЕ: Окно " + det + " закрыто во избежание утечки сессии.", Color.FromArgb(248, 113, 113));
+                        }
+                    });
+                }
+            } catch {}
+        }
+
         private void KillClaudeProcessesInMemory() {
             try {
                 foreach (Process p in Process.GetProcesses()) {
                     try {
                         string name = p.ProcessName.ToLowerInvariant();
-                        if (name == "claude" || name == "claude_dummy" || name.StartsWith("claude_")) {
+                        if (name == "claude" || name == "claude-desktop" || name == "claude_desktop" ||
+                            name == "claude_dummy" || name.StartsWith("claude-") || name.StartsWith("claude_")) {
                             p.Kill();
                         }
                     } catch {}
                 }
+                // Принудительно гасим сессии claude.ai в браузерах при активном KillSwitch
+                if (_cfg.KillSwitchEnabled) {
+                    KillBrowserClaudeSessions();
+                }
+
                 // Принудительно очищаем системный трей от фантомных иконок
                 RefreshSystemTray();
             } catch {}
@@ -4607,13 +4728,15 @@ namespace ProjectXO {
                         "$ErrorActionPreference = 'SilentlyContinue'; " +
                         "Get-NetFirewallRule | Where-Object { $_.Name -like 'Claude-Shield*' -or $_.DisplayName -like 'Claude-Shield*' } | Remove-NetFirewallRule; " +
                         "Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -like 'Claude-Shield*' -or (Get-ItemPropertyValue 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' $_.Name) -like '*Claude-Shield*' } | ForEach-Object { Remove-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' -Name $_.Name }; " +
-                        "$adapters = @(Get-NetAdapter | Where-Object { $_.InterfaceDescription -notmatch 'Wintun|WireGuard|TAP|TUN|Virtual|Tailscale|Amnezia|WARP|Mullvad|Proton|Neko|Sing-box|Clash|v2ray|Hiddify|VPN' -and $_.Status -ne 'Disabled' } | Select-Object -ExpandProperty Name); " +
+                        "$vpnPattern = 'Wintun|WireGuard|TAP|TUN|Virtual|Tailscale|Amnezia|WARP|Mullvad|Proton|Neko|Sing-box|Clash|v2ray|Hiddify|VPN|wwan'; " +
+                        "$adapters = @(Get-NetAdapter | Where-Object { $_.InterfaceDescription -notmatch $vpnPattern -and $_.Name -notmatch $vpnPattern -and $_.Status -ne 'Disabled' } | Select-Object -ExpandProperty Name); " +
                         "$idx = 1; " +
                         "foreach ($a in $adapters) { " +
                         "  $id = ($a -replace '[^a-zA-Z0-9]','_'); " +
                         "  New-NetFirewallRule -Name ('Claude-Shield-IPv4-' + $id) -DisplayName ('Claude-Shield-Block-IPv4-' + $a) -Direction Outbound -RemoteAddress '160.79.104.0/23' -InterfaceAlias $a -Action Block | Out-Null; " +
                         "  New-NetFirewallRule -Name ('Claude-Shield-IPv6-' + $id) -DisplayName ('Claude-Shield-Block-IPv6-' + $a) -Direction Outbound -RemoteAddress '2607:6bc0::/32' -InterfaceAlias $a -Action Block | Out-Null; " +
                         "  New-NetFirewallRule -Name ('Claude-Shield-App-' + $id) -DisplayName ('Claude-Shield-Block-App-' + $a) -Direction Outbound -Program 'Claude.exe' -InterfaceAlias $a -Action Block | Out-Null; " +
+                        "  New-NetFirewallRule -Name ('Claude-Shield-Desk-' + $id) -DisplayName ('Claude-Shield-Block-Desk-' + $a) -Direction Outbound -Program 'claude-desktop.exe' -InterfaceAlias $a -Action Block | Out-Null; " +
                         "  New-NetFirewallRule -Name ('Claude-Shield-CLI-' + $id) -DisplayName ('Claude-Shield-Block-CLI-' + $a) -Direction Outbound -Program 'claude.exe' -InterfaceAlias $a -Action Block | Out-Null; " +
                         "  New-NetFirewallRule -Name ('Claude-Shield-Pkg-' + $id) -DisplayName ('Claude-Shield-Block-Pkg-' + $a) -Direction Outbound -PackageFamilyName 'Claude_pzs8sxrjxfjjc' -InterfaceAlias $a -Action Block | Out-Null; " +
                         "  Disable-NetAdapterBinding -Name $a -ComponentId ms_tcpip6; " +

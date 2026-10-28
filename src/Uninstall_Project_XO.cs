@@ -447,6 +447,11 @@ namespace ProjectXO.Uninstaller {
                     Log("Восстановление сетевых параметров Windows...");
                     SetProgress(55);
                     try {
+                        using (RegistryKey rk = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient", true)) {
+                            if (rk != null) {
+                                rk.DeleteValue("DisableSmartNameResolution", false);
+                            }
+                        }
                         using (RegistryKey rk = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters", true)) {
                             if (rk != null) {
                                 rk.DeleteValue("DisableSmartNameResolution", false);
@@ -498,6 +503,36 @@ namespace ProjectXO.Uninstaller {
                         Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ProjectXO", false);
                         Registry.CurrentUser.DeleteSubKeyTree(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeBarrier", false);
                         Registry.CurrentUser.DeleteSubKeyTree(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\ProjectXO", false);
+                    } catch {}
+
+                    try {
+                        string appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClaudeBarrier");
+                        if (Directory.Exists(appDataDir)) Directory.Delete(appDataDir, true);
+                    } catch {}
+
+                    try {
+                        Registry.CurrentUser.DeleteSubKeyTree(@"Software\ClaudeBarrier", false);
+                    } catch {}
+
+                    try {
+                        string installDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
+                        foreach (string f in Directory.GetFiles(installDir)) {
+                            if (!f.EndsWith("Uninstall_Project_XO.exe", StringComparison.OrdinalIgnoreCase)) {
+                                try { File.Delete(f); } catch {}
+                            }
+                        }
+                        string toolsDir = Path.Combine(installDir, "tools");
+                        if (Directory.Exists(toolsDir)) {
+                            try { Directory.Delete(toolsDir, true); } catch {}
+                        }
+                        ProcessStartInfo psiDel = new ProcessStartInfo {
+                            FileName = "cmd.exe",
+                            Arguments = "/c timeout /t 2 /nobreak >nul & rmdir /s /q \"" + installDir + "\"",
+                            CreateNoWindow = true,
+                            UseShellExecute = false,
+                            WindowStyle = ProcessWindowStyle.Hidden
+                        };
+                        Process.Start(psiDel);
                     } catch {}
 
                     SetProgress(100);

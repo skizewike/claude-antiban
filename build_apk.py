@@ -3,7 +3,7 @@ import subprocess
 import zipfile
 import shutil
 
-ROOT_DIR = r"C:\Users\bbara\.gemini\antigravity\scratch\project_xo"
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 APP_DIR = os.path.join(ROOT_DIR, "android_app")
 TOOLS_DIR = os.path.join(ROOT_DIR, "tools")
 BUILD_DIR = os.path.join(APP_DIR, "build")
@@ -13,8 +13,21 @@ AAPT2 = os.path.join(TOOLS_DIR, "aapt2.exe")
 R8_JAR = os.path.join(TOOLS_DIR, "r8.jar")
 ANDROID_JAR = os.path.join(TOOLS_DIR, "android.jar")
 KEYSTORE = os.path.join(TOOLS_DIR, "debug.keystore")
-JAVAC = r"C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot\bin\javac.exe"
-JARSIGNER = r"C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot\bin\jarsigner.exe"
+
+def find_jdk_binary(name):
+    check = shutil.which(name)
+    if check: return check
+    candidates = [
+        rf"C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot\bin\{name}.exe",
+        rf"C:\Program Files\Java\jdk-17\bin\{name}.exe",
+        rf"C:\Program Files\Eclipse Adoptium\jdk-17\bin\{name}.exe"
+    ]
+    for c in candidates:
+        if os.path.exists(c): return c
+    return f"{name}.exe"
+
+JAVAC = find_jdk_binary("javac")
+JARSIGNER = find_jdk_binary("jarsigner")
 
 def run_cmd(cmd, desc):
     print(f"[*] {desc}...")

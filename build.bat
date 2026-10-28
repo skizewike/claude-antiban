@@ -57,14 +57,16 @@ echo [+] ClaudeBarrier-Android.apk built successfully.
 
 echo.
 echo [*] [5/5] Packaging ClaudeBarrier-Windows-Portable-x64.zip...
-python -c "import os, zipfile; base = r'C:\Users\bbara\.gemini\antigravity\scratch\project_xo'; zip_out = os.path.join(base, 'dist', 'ClaudeBarrier-Windows-Portable-x64.zip'); z = zipfile.ZipFile(zip_out, 'w', zipfile.ZIP_DEFLATED); z.write(os.path.join(base, 'dist', 'ClaudeBarrier.exe'), 'ClaudeBarrier.exe'); z.write(os.path.join(base, 'dist', 'Uninstall_Project_XO.exe'), 'Uninstall_Project_XO.exe'); z.write(os.path.join(base, 'app_icon.ico'), 'app_icon.ico'); z.write(os.path.join(base, 'README.md'), 'README.md'); z.close(); print('[+] Portable zip created successfully.')"
+python -c "import os, zipfile; base = os.getcwd(); zip_out = os.path.join(base, 'dist', 'ClaudeBarrier-Windows-Portable-x64.zip'); z = zipfile.ZipFile(zip_out, 'w', zipfile.ZIP_DEFLATED); z.write(os.path.join(base, 'dist', 'ClaudeBarrier.exe'), 'ClaudeBarrier.exe'); z.write(os.path.join(base, 'dist', 'Uninstall_Project_XO.exe'), 'Uninstall_Project_XO.exe'); z.write(os.path.join(base, 'app_icon.ico'), 'app_icon.ico'); z.write(os.path.join(base, 'README.md'), 'README.md'); z.close(); print('[+] Portable zip created successfully.')"
 
 echo.
-echo [*] Deploying release artifacts to Desktop...
-copy /y "dist\ClaudeBarrier-Setup-x64.exe" "C:\Users\bbara\Desktop\" >nul
-copy /y "dist\ClaudeBarrier-Windows-Portable-x64.zip" "C:\Users\bbara\Desktop\" >nul
-copy /y "dist\ClaudeBarrier-Android.apk" "C:\Users\bbara\Desktop\" >nul
-echo [+] Release packages copied to C:\Users\bbara\Desktop\
+if exist "%USERPROFILE%\Desktop" (
+    echo [*] Deploying release artifacts to Desktop...
+    copy /y "dist\ClaudeBarrier-Setup-x64.exe" "%USERPROFILE%\Desktop\" >nul
+    copy /y "dist\ClaudeBarrier-Windows-Portable-x64.zip" "%USERPROFILE%\Desktop\" >nul
+    if exist "dist\ClaudeBarrier-Android.apk" copy /y "dist\ClaudeBarrier-Android.apk" "%USERPROFILE%\Desktop\" >nul
+    echo [+] Release packages copied to %USERPROFILE%\Desktop\
+)
 
 echo.
 echo ================================================================
