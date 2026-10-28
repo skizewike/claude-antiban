@@ -10,7 +10,7 @@
 **Сетевой экран изоляции трафика и локальный Kill-Switch для Anthropic Claude**
 
 <p align="center">
-  <a href="https://github.com/skizewike/claude-antiban/releases/latest"><img src="https://img.shields.io/badge/release-v6.0.2-0078D4?style=for-the-badge&logo=github&logoColor=white" alt="Release" /></a>
+  <a href="https://github.com/skizewike/claude-antiban/releases/latest"><img src="https://img.shields.io/badge/release-v6.0.3-0078D4?style=for-the-badge&logo=github&logoColor=white" alt="Release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22c55e?style=for-the-badge" alt="License" /></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Android-6366f1?style=for-the-badge" alt="Platforms" />
   <a href="https://t.me/ClaudeBarrierBot"><img src="https://img.shields.io/badge/Telegram_Bot-@ClaudeBarrierBot-229ED9?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Bot" /></a>
@@ -49,8 +49,8 @@
 
 | Платформа (OS) | Пакеты загрузки (Download) |
 | :--- | :--- |
-| **Windows** <br> `Windows 10 / 11 (x64)` | [![OfficialSetup x64](https://img.shields.io/badge/OfficialSetup-x64-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.2/ClaudeBarrier-Setup-x64.exe) <br><br> [![Portable x64](https://img.shields.io/badge/Portable-x64-334155?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.2/ClaudeBarrier-Windows-Portable-x64.zip) |
-| **Android** <br> `Android 8.0+` | [![APK Universal](https://img.shields.io/badge/APK-Universal-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.2/ClaudeBarrier-Android.apk) |
+| **Windows** <br> `Windows 10 / 11 (x64)` | [![OfficialSetup x64](https://img.shields.io/badge/OfficialSetup-x64-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.3/ClaudeBarrier-Setup-x64.exe) <br><br> [![Portable x64](https://img.shields.io/badge/Portable-x64-334155?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.3/ClaudeBarrier-Windows-Portable-x64.zip) |
+| **Android** <br> `Android 8.0+` | [![APK Universal](https://img.shields.io/badge/APK-Universal-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.3/ClaudeBarrier-Android.apk) |
 
 ---
 
@@ -63,7 +63,7 @@
 
 ---
 
-## 🚀 Ключевые возможности версии 6.0.2
+## 🚀 Ключевые возможности версии 6.0.3
 
 * **Универсальное обнаружение VPN:** автоопределение любых современных VPN-клиентов по типу интерфейса и драйверу (WireGuard, AmneziaVPN, OpenVPN, TAP/TUN, WARP, Mullvad, ProtonVPN, Tailscale, Shadowsocks, Sing-box, Clash, Hiddify).
 * **Проверка маршрутизации ядра 0.0.0.0/0:** Win32-вызов `GetBestInterface` для адреса `160.79.104.10` в реальном времени проверяет, что исходящие пакеты Claude действительно направляются в VPN-интерфейс, а не в обход через физический шлюз.

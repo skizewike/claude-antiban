@@ -9,7 +9,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
-namespace ProjectXO.Uninstaller {
+namespace ClaudeBarrier.Uninstaller {
     public class UninstallerProgram {
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern bool SetDefaultDllDirectories(uint directoryFlags);
@@ -530,7 +530,7 @@ namespace ProjectXO.Uninstaller {
                     try {
                         string installDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
                         foreach (string f in Directory.GetFiles(installDir)) {
-                            if (!f.EndsWith("Uninstall_Project_XO.exe", StringComparison.OrdinalIgnoreCase)) {
+                            if (!f.EndsWith("Uninstall_Project_XO.exe", StringComparison.OrdinalIgnoreCase) && !f.EndsWith("Uninstall_ClaudeBarrier.exe", StringComparison.OrdinalIgnoreCase)) {
                                 try { File.Delete(f); } catch {}
                             }
                         }

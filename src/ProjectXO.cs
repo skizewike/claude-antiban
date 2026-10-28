@@ -19,7 +19,7 @@ using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace ProjectXO {
+namespace ClaudeBarrier {
     static class Program {
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern bool SetDefaultDllDirectories(uint directoryFlags);
@@ -1585,10 +1585,10 @@ namespace ProjectXO {
                 }
                 _allLogs.Add(item);
                 try {
-                    string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "project_xo.log");
+                    string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "claudebarrier.log");
                     FileInfo fi = new FileInfo(logFile);
                     if (fi.Exists && fi.Length > 5 * 1024 * 1024) {
-                        string oldLog = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "project_xo.old.log");
+                        string oldLog = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "claudebarrier.old.log");
                         if (File.Exists(oldLog)) File.Delete(oldLog);
                         File.Move(logFile, oldLog);
                     }
@@ -2376,7 +2376,7 @@ namespace ProjectXO {
 
             // Нижний футер 1 в 1 как в Cloudflare One Client
             Label lblCopy = new Label() {
-                Text = "v6.0.2 | ClaudeBarrier Traffic Sentinel",
+                Text = "v6.0.3 | ClaudeBarrier Traffic Sentinel",
                 Font = new Font("Segoe UI", 8.2f),
                 ForeColor = Color.FromArgb(80, 95, 120),
                 Location = new Point(0, 642),
@@ -2430,7 +2430,7 @@ namespace ProjectXO {
 
         private void ExportLogsToFile() {
             try {
-                string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "project_xo_export.log");
+                string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "claudebarrier_export.log");
                 if (_rtbLogs != null) {
                     File.WriteAllText(logPath, _rtbLogs.Text, System.Text.Encoding.UTF8);
                     MessageBox.Show("Журнал событий сохранен на Рабочий стол:\n" + logPath, "Экспорт журнала", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -3225,10 +3225,10 @@ namespace ProjectXO {
             btnBrowseZapret.Location = new Point(646, 175);
             cardPaths.Controls.Add(btnBrowseZapret);
 
-            // ================= CARD 3: ЛИЦЕНЗИЯ И ОПЦИИ СИСТЕМЫ =================
+            // ================= CARD 3: ЛИЦЕНЗИЯ И СЕТЕВАЯ БЕЗОПАСНОСТЬ WFP =================
             Panel cardLicense = new Panel() {
                 Location = new Point(32, 488),
-                Size = new Size(786, 130),
+                Size = new Size(786, 180),
                 BackColor = Color.FromArgb(19, 22, 32)
             };
             cardLicense.Paint += (s, pe) => {
@@ -3240,7 +3240,8 @@ namespace ProjectXO {
                     using (Pen pen = new Pen(Color.FromArgb(34, 39, 56), 1f)) g.DrawPath(pen, p);
                 }
                 using (Pen divPen = new Pen(Color.FromArgb(28, 33, 48), 1f)) {
-                    g.DrawLine(divPen, 16, 65, cardLicense.Width - 16, 65);
+                    g.DrawLine(divPen, 16, 58, cardLicense.Width - 16, 58);
+                    g.DrawLine(divPen, 16, 118, cardLicense.Width - 16, 118);
                 }
             };
             page.Controls.Add(cardLicense);
@@ -3250,7 +3251,7 @@ namespace ProjectXO {
                 Text = "Лицензия ClaudeBarrier",
                 Font = new Font("Segoe UI", 9.2f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(248, 250, 252),
-                Location = new Point(18, 12),
+                Location = new Point(18, 10),
                 AutoSize = true
             };
             cardLicense.Controls.Add(lblLicTitle);
@@ -3262,7 +3263,7 @@ namespace ProjectXO {
                 Text = isAct ? ("Статус: Активен (Осталось: " + remTime + ") • " + LicenseManager.MaskKey(key)) : "Статус: Не активирован или срок действия (3 дня) истек",
                 Font = new Font("Segoe UI", 8.2f),
                 ForeColor = isAct ? Color.FromArgb(52, 211, 153) : Color.FromArgb(239, 68, 68),
-                Location = new Point(18, 34),
+                Location = new Point(18, 32),
                 AutoSize = true
             };
             cardLicense.Controls.Add(lblLicStatus);
@@ -3273,36 +3274,59 @@ namespace ProjectXO {
                     _pnlActivationOverlay.BringToFront();
                 }
             });
-            btnChangeKey.Location = new Point(480, 16);
+            btnChangeKey.Location = new Point(480, 14);
             cardLicense.Controls.Add(btnChangeKey);
 
             CloudflareButton btnBotKey = CreateWarpButton("Бот ключей", 130, 32, (s, e) => {
                 try { Process.Start("https://t.me/ClaudeBarrierBot"); } catch {}
             });
-            btnBotKey.Location = new Point(626, 16);
+            btnBotKey.Location = new Point(626, 14);
             cardLicense.Controls.Add(btnBotKey);
 
-            // Строка 2: Деинсталляция
-            Label lblUTitle = new Label() {
-                Text = "Деинсталляция и сброс правил",
+            // Строка 2: Правила брандмауэра WFP
+            Label lblFwTitle = new Label() {
+                Text = "Правила брандмауэра WFP",
                 Font = new Font("Segoe UI", 9.2f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(248, 250, 252),
-                Location = new Point(18, 76),
+                Location = new Point(18, 68),
+                AutoSize = true
+            };
+            cardLicense.Controls.Add(lblFwTitle);
+
+            Label lblFwDesc = new Label() {
+                Text = "Снятие блокировок 160.79.104.0/23 и очистка внедренных фильтров ядра Windows",
+                Font = new Font("Segoe UI", 8.2f),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Location = new Point(18, 90),
+                AutoSize = true
+            };
+            cardLicense.Controls.Add(lblFwDesc);
+
+            CloudflareButton btnRemoveRules = CreateWarpDangerButton("Удалить правила", 150, 32, (s, e) => RemoveFirewallRules(showSuccessDialog: true));
+            btnRemoveRules.Location = new Point(606, 72);
+            cardLicense.Controls.Add(btnRemoveRules);
+
+            // Строка 3: Деинсталляция
+            Label lblUTitle = new Label() {
+                Text = "Деинсталляция ClaudeBarrier",
+                Font = new Font("Segoe UI", 9.2f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(18, 128),
                 AutoSize = true
             };
             cardLicense.Controls.Add(lblUTitle);
 
             Label lblUDesc = new Label() {
-                Text = "Удаление правил WFP из ядра Windows, сброс сетевых политик и деинсталляция барьера",
+                Text = "Полное удаление файлов программы, ярлыков и записей автозапуска из системы",
                 Font = new Font("Segoe UI", 8.2f),
                 ForeColor = Color.FromArgb(148, 163, 184),
-                Location = new Point(18, 98),
+                Location = new Point(18, 150),
                 AutoSize = true
             };
             cardLicense.Controls.Add(lblUDesc);
 
             CloudflareButton btnUninstall = CreateWarpDangerButton("Удалить барьер", 150, 32, (s, e) => RunUninstaller());
-            btnUninstall.Location = new Point(606, 80);
+            btnUninstall.Location = new Point(606, 132);
             cardLicense.Controls.Add(btnUninstall);
         }
 
@@ -3526,11 +3550,11 @@ namespace ProjectXO {
                     ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288 | SecurityProtocolType.Tls12;
                     HttpWebRequest req = (HttpWebRequest)WebRequest.Create("https://github.com/skizewike/claude-antiban/releases/latest");
                     req.Method = "HEAD";
-                    req.UserAgent = "ClaudeBarrier-Client/6.0.2";
+                    req.UserAgent = "ClaudeBarrier-Client/6.0.3";
                     req.Timeout = 6000;
                     req.AllowAutoRedirect = false;
 
-                    string latestTag = "v6.0.2";
+                    string latestTag = "v6.0.3";
                     string loc = "";
                     using (HttpWebResponse res = (HttpWebResponse)req.GetResponse()) {
                         loc = res.GetResponseHeader("Location");
@@ -3547,7 +3571,7 @@ namespace ProjectXO {
                     }
                     SafeInvoke(() => {
                         _latestReleaseUrl = string.IsNullOrEmpty(loc) ? "https://github.com/skizewike/claude-antiban/releases/latest" : loc;
-                        string curVer = "v6.0.2";
+                        string curVer = "v6.0.3";
                         bool isNewer = CompareVersions(latestTag, curVer) > 0;
 
                         if (isNewer) {
@@ -3814,7 +3838,10 @@ namespace ProjectXO {
         }
 
         private void RunUninstaller() {
-            string uninstaller = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Uninstall_Project_XO.exe");
+            string uninstaller = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Uninstall_ClaudeBarrier.exe");
+            if (!File.Exists(uninstaller)) {
+                uninstaller = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Uninstall_Project_XO.exe");
+            }
             if (File.Exists(uninstaller)) {
                 ProcessStartInfo psi = new ProcessStartInfo {
                     FileName = uninstaller,
@@ -4005,7 +4032,7 @@ namespace ProjectXO {
                     req.Proxy = null;
                     req.Accept = "application/dns-json";
                     req.Timeout = 2500;
-                    req.UserAgent = "ClaudeBarrier-DoH/6.0.2";
+                    req.UserAgent = "ClaudeBarrier-DoH/6.0.3";
 
                     using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) {
                         sw.Stop();
@@ -4237,7 +4264,7 @@ namespace ProjectXO {
                                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                                 req.Proxy = null;
                                 req.Timeout = 3200;
-                                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/6.0.2";
+                                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/6.0.3";
                                 using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
                                 using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8)) {
                                     string json = sr.ReadToEnd();
@@ -4318,7 +4345,7 @@ namespace ProjectXO {
                                     reqApi.Proxy = null;
                                     reqApi.Timeout = 2500;
                                     reqApi.Method = "HEAD";
-                                    reqApi.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/6.0.2";
+                                    reqApi.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/6.0.3";
                                     using (HttpWebResponse respApi = (HttpWebResponse)reqApi.GetResponse()) {
                                         pingMs = (int)sw.ElapsedMilliseconds;
                                     }
@@ -4469,7 +4496,7 @@ namespace ProjectXO {
                         // WFP счетчик
                         if (fwRulesCount > 0) {
                             if (_lblWarpWfpVal != null) {
-                                _lblWarpWfpVal.Text = "Активна (" + fwRulesCount + " правил ядра)";
+                                _lblWarpWfpVal.Text = "Активен (" + fwRulesCount + " правил ядра)";
                                 _lblWarpWfpVal.ForeColor = Color.FromArgb(52, 211, 153);
                             }
                         } else {
@@ -4852,6 +4879,63 @@ namespace ProjectXO {
                             MessageBoxIcon.Warning);
                     }
                 });
+            });
+        }
+
+        private void RemoveFirewallRules(bool showSuccessDialog = true) {
+            if (showSuccessDialog) {
+                DialogResult dr = MessageBox.Show(
+                    "Вы действительно хотите удалить все правила брандмауэра ClaudeBarrier (WFP) из ядра Windows?\n\n" +
+                    "Сетевая изоляция интерфейсов будет отключена, ограничения для Claude будут сняты.",
+                    "Удаление правил WFP",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+                if (dr != DialogResult.Yes) return;
+            }
+
+            Log("WFP", "Удаление правил сетевой изоляции WFP из ядра Windows...", Color.FromArgb(249, 115, 22));
+
+            ThreadPool.QueueUserWorkItem((st) => {
+                try {
+                    string script = 
+                        "$ErrorActionPreference = 'SilentlyContinue'; " +
+                        "Get-NetFirewallRule | Where-Object { $_.Name -like 'Claude-Shield*' -or $_.DisplayName -like 'Claude-Shield*' } | Remove-NetFirewallRule; " +
+                        "Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -like 'Claude-Shield*' -or (Get-ItemPropertyValue 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' $_.Name) -like '*Claude-Shield*' } | ForEach-Object { Remove-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' -Name $_.Name }; " +
+                        "Clear-DnsClientCache";
+
+                    ProcessStartInfo psi = new ProcessStartInfo {
+                        FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe"),
+                        Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" + script + "\"",
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                        WindowStyle = ProcessWindowStyle.Hidden
+                    };
+                    Process proc = Process.Start(psi);
+                    if (proc != null) proc.WaitForExit(10000);
+
+                    SafeInvoke(() => {
+                        if (_lblWarpWfpVal != null) {
+                            _lblWarpWfpVal.Text = "Правила не внедрены";
+                            _lblWarpWfpVal.ForeColor = Color.FromArgb(248, 113, 113);
+                        }
+                        Log("WFP", "Все правила брандмауэра ClaudeBarrier успешно удалены из ядра.", Color.FromArgb(52, 211, 153));
+                        if (showSuccessDialog) {
+                            MessageBox.Show(
+                                "Все правила брандмауэра ClaudeBarrier (WFP) успешно удалены из системы.\n\n" +
+                                "Сетевой экран Windows освобожден от ограничений.",
+                                "ClaudeBarrier",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information);
+                        }
+                    });
+                } catch (Exception ex) {
+                    SafeInvoke(() => {
+                        Log("ERR", "Ошибка при удалении правил WFP: " + ex.Message, Color.FromArgb(239, 68, 68));
+                        if (showSuccessDialog) {
+                            MessageBox.Show("Не удалось удалить правила WFP:\n" + ex.Message, "Ошибка ClaudeBarrier", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                    });
+                }
             });
         }
 

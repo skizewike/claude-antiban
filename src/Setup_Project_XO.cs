@@ -9,7 +9,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
-namespace ProjectXO.Installer {
+namespace ClaudeBarrier.Installer {
     public class SetupProgram {
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern bool SetDefaultDllDirectories(uint directoryFlags);
@@ -561,12 +561,13 @@ namespace ProjectXO.Installer {
                     SetProgress(30, "Развертывание исполняемых файлов ядра...");
                     string destExe = Path.Combine(targetDir, "ClaudeBarrier.exe");
                     string legacyExe = Path.Combine(targetDir, "ProjectXO.exe");
-                    string destUninst = Path.Combine(targetDir, "Uninstall_Project_XO.exe");
+                    string destUninst = Path.Combine(targetDir, "Uninstall_ClaudeBarrier.exe");
                     string destIco = Path.Combine(targetDir, "app_icon.ico");
 
-                    ExtractResourceToFile("ProjectXO.exe", destExe);
+                    if (typeof(SetupProgram).Assembly.GetManifestResourceStream("ClaudeBarrier.exe") != null) ExtractResourceToFile("ClaudeBarrier.exe", destExe); else ExtractResourceToFile("ProjectXO.exe", destExe);
                     try { File.Copy(destExe, legacyExe, true); } catch {}
-                    ExtractResourceToFile("Uninstall_Project_XO.exe", destUninst);
+                    if (typeof(SetupProgram).Assembly.GetManifestResourceStream("Uninstall_ClaudeBarrier.exe") != null) ExtractResourceToFile("Uninstall_ClaudeBarrier.exe", destUninst); else ExtractResourceToFile("Uninstall_Project_XO.exe", destUninst);
+                    try { string leg = Path.Combine(targetDir, "Uninstall_Project_XO.exe"); if (File.Exists(leg)) File.Delete(leg); } catch {}
                     ExtractResourceToFile("app_icon.ico", destIco);
 
                     SetProgress(60, "Создание ярлыков в системе...");
@@ -614,7 +615,7 @@ namespace ProjectXO.Installer {
                 using (RegistryKey rk = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeBarrier")) {
                     if (rk != null) {
                         rk.SetValue("DisplayName", "ClaudeBarrier");
-                        rk.SetValue("DisplayVersion", "6.0.2");
+                        rk.SetValue("DisplayVersion", "6.0.3");
                         rk.SetValue("Publisher", "ClaudeBarrier Security Team");
                         rk.SetValue("DisplayIcon", mainExe + ",0");
                         rk.SetValue("UninstallString", "\"" + uninstallerExe + "\"");

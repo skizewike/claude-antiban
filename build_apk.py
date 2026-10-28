@@ -106,7 +106,7 @@ def build():
 
     # 5. Add classes.dex to APK
     classes_dex = os.path.join(dex_dir, "classes.dex")
-    target_apk = os.path.join(DIST_DIR, "ProjectXO.apk")
+    target_apk = os.path.join(DIST_DIR, "ClaudeBarrier-Android.apk")
     shutil.copyfile(unaligned_apk, target_apk)
 
     with zipfile.ZipFile(target_apk, "a") as z:
@@ -118,7 +118,8 @@ def build():
         f'"{JARSIGNER}" -verbose -sigalg SHA256withRSA -digestalg SHA-256 '
         f'-keystore "{KEYSTORE}" -storepass android "{target_apk}" androiddebugkey'
     )
-    run_cmd(cmd_sign, "Sign ProjectXO.apk")
+    run_cmd(cmd_sign, "Sign ClaudeBarrier-Android.apk")
+    shutil.copyfile(target_apk, os.path.join(DIST_DIR, "ProjectXO.apk"))
 
     print("\n" + "="*60)
     print(f"[+] SUCCESS! ProjectXO.apk created at:\n    {target_apk}")
