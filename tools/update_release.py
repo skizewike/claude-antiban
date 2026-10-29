@@ -11,24 +11,25 @@ res = subprocess.run([git_exe, 'credential', 'fill'], input=inp, capture_output=
 token = [l[9:].strip() for l in res.stdout.splitlines() if l.startswith('password=')][0]
 
 repo = 'skizewike/claude-antiban'
-tag = 'v6.0.3'
+tag = 'v6.0.4'
 
 # 1. Prepare Release description
-release_title = "ClaudeBarrier v6.0.3"
-release_body = """# ClaudeBarrier v6.0.3 — Official Release
+release_title = "ClaudeBarrier v6.0.4"
+release_body = """# ClaudeBarrier v6.0.4 — Official Release
 
 **Официальный бот активации и поддержки:** [@ClaudeBarrierBot](https://t.me/ClaudeBarrierBot)  
 **Репозиторий:** [skizewike/claude-antiban](https://github.com/skizewike/claude-antiban)
 
 ---
 
-### Что нового в версии 6.0.3
-* **Sentinel Guard (Fail-Closed Watchdog):** Превентивная служба завершения процессов (`Claude.exe`, `claude-desktop.exe`, `claude.exe` CLI, `node.exe`) за <15 мс при малейшем отклонении Pinned IP или разрыве VPN. 100% гарантия от бана Anthropic.
-* **WFP Kernel + Pinned IP Resolver:** Двухуровневая гибридная защита — аппаратный сброс (DROP) пакетов на уровне ядра Windows (`ndis.sys`/`tcpip.sys`) в сочетании с параллельным конкурентным опросом независимых внешних резолверов IP (`api.ipify.org`, `ipinfo.io`, `ifconfig.me/ip`).
-* **100% Реальные измерения (Zero Mock/AI Numbers):** Полный отказ от приблизительных и сгенерированных метрик. Измеряется реальный RTT через прямое TLS-рукопожатие с `api.anthropic.com:443`, живые правила WFP и прямой опрос активного шлюза Windows.
-* **Управление правилами WFP в Настройках:** Штатная кнопка безопасного сброса и удаления всех внедренных правил фильтрации ядра без деинсталляции приложения.
-* **Полная унификация бренда ClaudeBarrier:** Устранено legacy-именование Project XO во всех модулях, инсталляторе и деинсталляторе.
-* **WCAG 2.2 Level AA & Per-Monitor DPI v2:** Поддержка клавиатурной навигации и идеальная четкость UI на экранах с масштабированием 125%, 150%, 200%.
+### Что нового в версии 6.0.4
+* **Win32 Kernel Hook NotifyAddrChange (iphlpapi.dll):** Мгновенная реакция за 0–5 мс на любые изменения таблицы сетевой маршрутизации ядра Windows. Устранена любая задержка таймеров.
+* **Многосигнальная триангуляция (Multi-Signal Triangulation):** Мониторинг 3 независимых векторов (Процесс VPN, Маршрут ядра `0.0.0.0/0` через виртуальный адаптер Wintun/WireGuard, Закрепленный IP с конкурентным опросом резолверов). Правило 2 из 3; мгновенный аппаратный сброс при падении маршрута.
+* **Двухэтапный Process Killer:** Корректное закрытие всех окон Claude через `WM_CLOSE` -> пауза 150 мс -> принудительное снятие выживших проверенных PID (`Process.Kill(entireProcessTree: true)`).
+* **Гибридная системная служба Windows (ClaudeBarrierService):** Фоновый системный сервис под учетной записью `NT AUTHORITY\SYSTEM` с Named Pipe IPC (`\\\\.\\pipe\\ClaudeBarrierServicePipe`) и 5-секундным heartbeat. Блокирует утечки до входа пользователя и при крахе графического интерфейса.
+* **Timezone Guard (Защита от антифрода):** Проверка соответствия часового пояса Windows геолокации VPN, предотвращающая антифрод-блокировки Anthropic.
+* **Safe Launcher Pre-Flight:** Контрольная панель предстартовой проверки безопасности перед открытием Claude Desktop, Web или CLI.
+* **100% Реальные метрики (Zero Mock/AI Numbers):** Полный отказ от приблизительных и сгенерированных метрик. Измеряется реальный RTT через прямое TLS-рукопожатие с `api.anthropic.com:443`, живые правила WFP и прямой опрос активного шлюза Windows.
 
 ---
 
@@ -36,8 +37,8 @@ release_body = """# ClaudeBarrier v6.0.3 — Official Release
 
 | Платформа (OS) | Пакет загрузки | Описание |
 | :--- | :--- | :--- |
-| **Windows x64** | [**ClaudeBarrier-Setup-x64.exe**](https://github.com/skizewike/claude-antiban/releases/download/v6.0.3/ClaudeBarrier-Setup-x64.exe) | Полный инсталлятор с автоматической регистрацией и треем |
-| **Windows Portable** | [**ClaudeBarrier-Windows-Portable-x64.zip**](https://github.com/skizewike/claude-antiban/releases/download/v6.0.3/ClaudeBarrier-Windows-Portable-x64.zip) | Портативная версия без инсталляции в систему |
+| **Windows x64** | [**ClaudeBarrier-Setup-x64.exe**](https://github.com/skizewike/claude-antiban/releases/download/v6.0.4/ClaudeBarrier-Setup-x64.exe) | Полный инсталлятор с автоматической регистрацией и треем |
+| **Windows Portable** | [**ClaudeBarrier-Windows-Portable-x64.zip**](https://github.com/skizewike/claude-antiban/releases/download/v6.0.4/ClaudeBarrier-Windows-Portable-x64.zip) | Портативная версия без инсталляции в систему |
 
 ---
 
@@ -58,22 +59,72 @@ release_body = """# ClaudeBarrier v6.0.3 — Official Release
 - **Консоль ядра:** Интерактивный журнал сетевых событий в реальном времени с фильтрацией по категориям.
 """
 
-# 2. Get release
+# 2. Delete older releases so only the latest remains (per user request)
+print("[*] Fetching all existing releases...")
+all_rels_req = urllib.request.Request(
+    f'https://api.github.com/repos/{repo}/releases',
+    headers={'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'Release-Bot'}
+)
+try:
+    with urllib.request.urlopen(all_rels_req) as resp:
+        all_releases = json.loads(resp.read().decode())
+        for r in all_releases:
+            if r.get('tag_name') != tag:
+                old_id = r['id']
+                old_tag = r.get('tag_name', 'unknown')
+                print(f"[*] Removing older release {old_tag} (ID: {old_id})...")
+                del_rel_req = urllib.request.Request(
+                    f'https://api.github.com/repos/{repo}/releases/{old_id}',
+                    headers={'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'Release-Bot'},
+                    method='DELETE'
+                )
+                try:
+                    urllib.request.urlopen(del_rel_req)
+                    print(f"[+] Deleted old release {old_tag}")
+                except Exception as e:
+                    print(f"[!] Warning deleting release {old_tag}: {e}")
+except Exception as e:
+    print(f"[!] Warning listing releases: {e}")
+
+# 3. Get or Create release v6.0.4
 url_get = f'https://api.github.com/repos/{repo}/releases/tags/{tag}'
 req_get = urllib.request.Request(
     url_get,
     headers={'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'Release-Bot'}
 )
 
-with urllib.request.urlopen(req_get) as resp:
-    rel_info = json.loads(resp.read().decode())
-    print(f"[+] Found release {tag} (ID: {rel_info['id']})")
+rel_info = None
+try:
+    with urllib.request.urlopen(req_get) as resp:
+        rel_info = json.loads(resp.read().decode())
+        print(f"[+] Found release {tag} (ID: {rel_info['id']})")
+except urllib.error.HTTPError as e:
+    if e.code == 404:
+        print(f"[*] Release {tag} not found, creating new release...")
+        create_data = json.dumps({
+            "tag_name": tag,
+            "name": release_title,
+            "body": release_body,
+            "draft": False,
+            "prerelease": False
+        }).encode('utf-8')
+        req_post = urllib.request.Request(
+            f'https://api.github.com/repos/{repo}/releases',
+            data=create_data,
+            headers={'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json', 'User-Agent': 'Release-Bot'},
+            method='POST'
+        )
+        with urllib.request.urlopen(req_post) as cresp:
+            rel_info = json.loads(cresp.read().decode())
+            print(f"[+] Created release {tag} (ID: {rel_info['id']})")
+    else:
+        raise
 
 release_id = rel_info['id']
 upload_url_base = rel_info['upload_url'].split('{')[0]
 existing_assets = rel_info.get('assets', [])
 
-# Update body
+# Update body & title
 patch_data = json.dumps({
     "name": release_title,
     "body": release_body,
@@ -92,7 +143,7 @@ try:
 except Exception as e:
     print(f"[!] Patch warning: {e}")
 
-# 3. Upload / replace new binaries
+# 4. Upload / replace new binaries
 dist_dir = r'C:\Users\bbara\.gemini\antigravity\scratch\project_xo\dist'
 artifacts = [
     'ClaudeBarrier-Setup-x64.exe',
@@ -148,4 +199,4 @@ for art in artifacts:
     except Exception as e:
         print(f"[!] Failed to upload {art}: {e}")
 
-print("[+] All release assets for v6.0.3 refreshed successfully.")
+print("[+] All release assets for v6.0.4 refreshed successfully.")

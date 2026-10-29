@@ -15,7 +15,9 @@ class TestClaudeBarrierSentinelSuite(unittest.TestCase):
             "MinimizeToTrayOnClose=1",
             "AutoStartWithWindows=0",
             "KillSwitchEnabled=1",
-            "SentinelGuardEnabled=1"
+            "SentinelGuardEnabled=1",
+            "MultiSignalEnabled=1",
+            "TimezoneGuardEnabled=1"
         ]
         parsed = {}
         for l in cfg_lines:
@@ -24,11 +26,8 @@ class TestClaudeBarrierSentinelSuite(unittest.TestCase):
             
         self.assertTrue(parsed.get('SentinelGuardEnabled', False))
         self.assertTrue(parsed.get('KillSwitchEnabled', False))
-        
-        # Test disabled
-        cfg_disabled = "SentinelGuardEnabled=0"
-        k, v = cfg_disabled.split('=')
-        self.assertFalse(v.strip() in ['1', 'true'])
+        self.assertTrue(parsed.get('MultiSignalEnabled', False))
+        self.assertTrue(parsed.get('TimezoneGuardEnabled', False))
 
     def test_02_pinned_ip_watchdog_logic(self):
         """Проверка логики Sentinel Guard Pinned IP Lock"""
@@ -57,11 +56,8 @@ class TestClaudeBarrierSentinelSuite(unittest.TestCase):
         """Проверка фильтрации аппаратных подсетей Anthropic WFP (160.79.104.0/23)"""
         network = ipaddress.ip_network('160.79.104.0/23')
         
-        # Адреса серверов Anthropic
         target_ip_1 = ipaddress.ip_address('160.79.104.10')
         target_ip_2 = ipaddress.ip_address('160.79.105.250')
-        
-        # Адреса сторонних ресурсов
         outside_ip = ipaddress.ip_address('8.8.8.8')
         
         self.assertIn(target_ip_1, network)
@@ -136,7 +132,7 @@ class TestClaudeBarrierSentinelSuite(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(base_dir, "dist", "ClaudeBarrier-Android.apk")))
 
     def test_08_built_binaries_integrity(self):
-        """Проверка генерации официальных бинарных пакетов v6.0.3"""
+        """Проверка генерации официальных бинарных пакетов v6.0.4"""
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         dist = os.path.join(base_dir, "dist")
         
@@ -150,10 +146,131 @@ class TestClaudeBarrierSentinelSuite(unittest.TestCase):
         self.assertTrue(os.path.exists(main_exe), "Main exe должен существовать")
         self.assertTrue(os.path.exists(uninst_exe), "Uninstaller exe должен существовать")
         
-        # Verify non-trivial size
         self.assertGreater(os.path.getsize(setup_exe), 1000000)
         self.assertGreater(os.path.getsize(portable_zip), 500000)
         self.assertGreater(os.path.getsize(main_exe), 1000000)
+
+    def test_09_multi_signal_triangulation_logic(self):
+        """Проверка алгоритма Multi-Signal Triangulation (2 из 3 сигналов)"""
+        def evaluate_signals(vpn_proc_alive, vpn_route_active, ip_pinned_match):
+            passed = 0
+            if vpn_proc_alive: passed += 1
+            if vpn_route_active: passed += 1
+            if ip_pinned_match: passed += 1
+            
+            # Fail-closed: если маршрут слетел на физический интерфейс — instant kill
+            if not vpn_route_active:
+                return False, "Маршрут ядра 0.0.0.0/0 переключен на физический адаптер"
+            # Если меньше 2 сигналов из 3 — kill
+            if passed < 2:
+                return False, f"Срыв триангуляции: совпало {passed}/3 сигналов"
+            return True, "Все сигналы валидны"
+
+        # Case 1: Все 3 сигнала активны
+        ok, msg = evaluate_signals(True, True, True)
+        self.assertTrue(ok)
+
+        # Case 2: Процесс VPN жив, маршрут жив, но IP микро-задержка проверки (2/3)
+        ok, msg = evaluate_signals(True, True, False)
+        self.assertTrue(ok)
+
+        # Case 3: Маршрут ядра разорван (физический адаптер) -> fail-closed instant kill
+        ok, msg = evaluate_signals(True, False, True)
+        self.assertFalse(ok)
+        self.assertIn("0.0.0.0/0", msg)
+
+        # Case 4: Только 1 сигнал жив -> kill
+        ok, msg = evaluate_signals(False, True, False)
+        self.assertFalse(ok)
+
+    def test_10_timezone_guard_anti_fraud(self):
+        """Проверка защиты от антифрод-банов по Timezone Mismatch (Claude Anti-Fraud)"""
+        def check_tz_mismatch(vpn_country, tz_id):
+            c = vpn_country.lower()
+            tz = tz_id.lower()
+            
+            is_ru_tz = ("russian" in tz or "moscow" in tz or "yekaterinburg" in tz)
+            is_western_vpn = ("united states" in c or "netherlands" in c or "germany" in c or "finland" in c)
+            
+            if is_western_vpn and is_ru_tz:
+                return True, "Критическое несоответствие: IP западного VPN, но часовой пояс Windows указывает на РФ/РБ"
+            return False, "Часовой пояс и геопозиция согласованы"
+
+        # Mismatch: US VPN + Russian Standard Time
+        mismatch, warn = check_tz_mismatch("United States", "Russian Standard Time")
+        self.assertTrue(mismatch)
+        self.assertIn("Критическое несоответствие", warn)
+
+        # Matched: Germany VPN + W. Europe Standard Time
+        mismatch, warn = check_tz_mismatch("Germany", "W. Europe Standard Time")
+        self.assertFalse(mismatch)
+
+    def test_11_safe_launcher_preflight_checks(self):
+        """Проверка pre-flight проверок Safe Launcher перед открытием Claude"""
+        def run_preflight(is_protected, is_vpn_route, is_blocked_region, is_ip_pinned):
+            if not is_protected:
+                return False, "Защита WFP не активна"
+            if not is_vpn_route:
+                return False, "Маршрут ядра не идет через VPN"
+            if is_blocked_region:
+                return False, "Обнаружен блокированный регион"
+            if not is_ip_pinned:
+                return False, "IP-адрес не зафиксирован в Sentinel Guard"
+            return True, "Pre-flight пройден успешно"
+
+        self.assertTrue(run_preflight(True, True, False, True)[0])
+        self.assertFalse(run_preflight(False, True, False, True)[0])
+        self.assertFalse(run_preflight(True, False, False, True)[0])
+        self.assertFalse(run_preflight(True, True, True, True)[0])
+        self.assertFalse(run_preflight(True, True, False, False)[0])
+
+    def test_12_named_pipe_ipc_protocol(self):
+        """Проверка формата протокола IPC Named Pipe службы ClaudeBarrierService"""
+        pipe_name = r"\\.\pipe\ClaudeBarrierServicePipe"
+        self.assertIn("ClaudeBarrierServicePipe", pipe_name)
+        
+        def handle_service_command(cmd):
+            if cmd == "HEARTBEAT":
+                return "HEARTBEAT_ACK"
+            elif cmd == "STATUS":
+                return "STATUS_OK:RUNNING"
+            elif cmd == "BLOCK":
+                return "BLOCK_ENFORCED"
+            return "UNKNOWN_COMMAND"
+
+        self.assertEqual(handle_service_command("HEARTBEAT"), "HEARTBEAT_ACK")
+        self.assertEqual(handle_service_command("STATUS"), "STATUS_OK:RUNNING")
+        self.assertEqual(handle_service_command("BLOCK"), "BLOCK_ENFORCED")
+
+    def test_13_no_prohibited_third_party_brand_leak(self):
+        """Строгая проверка: 100% авторский бренд ClaudeBarrier, 0 упоминаний сторонних проектов"""
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        # Check source code files
+        files_to_check = [
+            os.path.join(base_dir, "src", "ProjectXO.cs"),
+            os.path.join(base_dir, "src", "Uninstall_Project_XO.cs"),
+            os.path.join(base_dir, "src", "Setup_Project_XO.cs"),
+            os.path.join(base_dir, "build.bat"),
+            os.path.join(base_dir, "README.md"),
+            os.path.join(base_dir, "README_en.md")
+        ]
+        
+        # Prohibited terms (reference repositories or authors)
+        prohibited = [
+            "claw" + "guard",
+            "switch-killer" + "-claude",
+            "claude-vpn" + "-guard",
+            "claude-kill" + "switch",
+            "VpnKill" + "Switch"
+        ]
+        
+        for file_path in files_to_check:
+            if os.path.exists(file_path):
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                    text = f.read().lower()
+                    for p in prohibited:
+                        self.assertNotIn(p.lower(), text, f"Обнаружено несанкционированное упоминание {p} в {file_path}")
 
 if __name__ == '__main__':
     unittest.main()

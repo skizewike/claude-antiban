@@ -4,7 +4,7 @@ chcp 65001 >nul
 cd /d "%~dp0"
 title ClaudeBarrier Build Pipeline
 echo ================================================================
-echo             CLAUDEBARRIER BUILD PIPELINE v6.0.3
+echo             CLAUDEBARRIER BUILD PIPELINE v6.0.4
 echo ================================================================
 echo.
 
@@ -27,8 +27,8 @@ copy /y "dist\Uninstall_ClaudeBarrier.exe" "dist\Uninstall_Project_XO.exe" >nul
 echo [+] Uninstall_ClaudeBarrier.exe built successfully.
 
 echo.
-echo [*] [2/4] Compiling ClaudeBarrier.exe (Main WFP Shield with WARP Dark UI)...
-"%CSC%" /target:winexe /optimize+ /win32icon:"app_icon.ico" /resource:app_icon.ico,app_icon.ico /resource:app_icon.png,app_icon.png /resource:tools\zapret_bundle.zip,zapret_bundle.zip /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /r:System.Security.dll /out:"dist\ClaudeBarrier.exe" "src\ProjectXO.cs"
+echo [*] [2/4] Compiling ClaudeBarrier.exe (Main WFP Shield, Hybrid Service and Sentinel UI)...
+"%CSC%" /target:winexe /optimize+ /win32icon:"app_icon.ico" /resource:app_icon.ico,app_icon.ico /resource:app_icon.png,app_icon.png /resource:tools\zapret_bundle.zip,zapret_bundle.zip /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /r:System.Security.dll /r:System.ServiceProcess.dll /r:System.Configuration.Install.dll /out:"dist\ClaudeBarrier.exe" "src\ProjectXO.cs"
 if %errorlevel% neq 0 (
     echo [!] Failed to compile ClaudeBarrier.exe
     exit /b %errorlevel%
@@ -61,5 +61,5 @@ if exist "%USERPROFILE%\Desktop" (
 
 echo.
 echo ================================================================
-echo [+] ALL RELEASE ARTIFACTS (SETUP, PORTABLE ZIP) v6.0.3 READY!
+echo [+] ALL RELEASE ARTIFACTS (SETUP, PORTABLE ZIP) v6.0.4 READY!
 echo ================================================================

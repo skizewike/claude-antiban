@@ -22,3 +22,4 @@ __pycache__/
 b64_emblems.cs
 *.vbs
 publish_to_github.bat
+.planning/

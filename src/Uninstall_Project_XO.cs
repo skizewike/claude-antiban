@@ -428,6 +428,27 @@ namespace ClaudeBarrier.Uninstaller {
 
             System.Threading.ThreadPool.QueueUserWorkItem((st) => {
                 try {
+                    Log("Остановка и удаление системной службы ClaudeBarrierService...");
+                    try {
+                        ProcessStartInfo psiStop = new ProcessStartInfo {
+                            FileName = "sc.exe",
+                            Arguments = "stop ClaudeBarrierService",
+                            CreateNoWindow = true,
+                            UseShellExecute = false
+                        };
+                        Process pStop = Process.Start(psiStop);
+                        if (pStop != null) pStop.WaitForExit(2000);
+
+                        ProcessStartInfo psiDel = new ProcessStartInfo {
+                            FileName = "sc.exe",
+                            Arguments = "delete ClaudeBarrierService",
+                            CreateNoWindow = true,
+                            UseShellExecute = false
+                        };
+                        Process pDel = Process.Start(psiDel);
+                        if (pDel != null) pDel.WaitForExit(2000);
+                    } catch {}
+
                     Log("Завершение активных процессов барьера...");
                     SetProgress(15);
                     try {

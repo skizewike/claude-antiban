@@ -1,5 +1,8 @@
 using System.IO.Compression;
 using System;
+using System.IO.Pipes;
+using System.ServiceProcess;
+using System.Configuration.Install;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -52,6 +55,31 @@ namespace ClaudeBarrier {
                     }
                 }
             } catch { }
+
+            // Проверка аргументов командной строки для системной службы Windows
+            if (args != null && args.Length > 0) {
+                string a0 = args[0].ToLowerInvariant();
+                if (a0 == "--service" || a0 == "/service" || a0 == "-s") {
+                    ServiceBase.Run(new ClaudeBarrierWindowsService());
+                    return;
+                }
+                if (a0 == "--service-install") {
+                    ClaudeBarrierServiceController.InstallService();
+                    return;
+                }
+                if (a0 == "--service-uninstall") {
+                    ClaudeBarrierServiceController.UninstallService();
+                    return;
+                }
+                if (a0 == "--service-start") {
+                    ClaudeBarrierServiceController.StartService();
+                    return;
+                }
+                if (a0 == "--service-stop") {
+                    ClaudeBarrierServiceController.StopService();
+                    return;
+                }
+            }
 
             // 1. Проверка и автоматический запрос прав Администратора
             if (!IsAdministrator()) {
@@ -290,6 +318,10 @@ namespace ClaudeBarrier {
         public bool AutoStartZapret = false;
         public bool KillSwitchEnabled = true;
         public bool SentinelGuardEnabled = true;
+        public bool MultiSignalEnabled = true;
+        public string VpnProcessList = "wireguard,openvpn,amnezia-vpn,tailscaled,tailscale,warp-svc,sing-box,clash-verge,clash,hiddify,v2ray";
+        public bool TimezoneGuardEnabled = true;
+        public int RttThresholdMs = 400;
 
         private string ConfigPath {
             get {
@@ -319,6 +351,10 @@ namespace ClaudeBarrier {
                             else if (k == "AutoStartZapret") AutoStartZapret = (v == "1" || v.ToLower() == "true");
                             else if (k == "KillSwitchEnabled") KillSwitchEnabled = (v == "1" || v.ToLower() == "true");
                             else if (k == "SentinelGuardEnabled") SentinelGuardEnabled = (v == "1" || v.ToLower() == "true");
+                            else if (k == "MultiSignalEnabled") MultiSignalEnabled = (v == "1" || v.ToLower() == "true");
+                            else if (k == "VpnProcessList") VpnProcessList = v;
+                            else if (k == "TimezoneGuardEnabled") TimezoneGuardEnabled = (v == "1" || v.ToLower() == "true");
+                            else if (k == "RttThresholdMs") { int parsed; if (int.TryParse(v, out parsed)) RttThresholdMs = parsed; }
                         }
                     }
                 }
@@ -337,7 +373,11 @@ namespace ClaudeBarrier {
                     "ZapretArgs=" + (ZapretArgs ?? ""),
                     "AutoStartZapret=" + (AutoStartZapret ? "1" : "0"),
                     "KillSwitchEnabled=" + (KillSwitchEnabled ? "1" : "0"),
-                    "SentinelGuardEnabled=" + (SentinelGuardEnabled ? "1" : "0")
+                    "SentinelGuardEnabled=" + (SentinelGuardEnabled ? "1" : "0"),
+                    "MultiSignalEnabled=" + (MultiSignalEnabled ? "1" : "0"),
+                    "VpnProcessList=" + (VpnProcessList ?? ""),
+                    "TimezoneGuardEnabled=" + (TimezoneGuardEnabled ? "1" : "0"),
+                    "RttThresholdMs=" + RttThresholdMs
                 };
                 File.WriteAllLines(ConfigPath, lines.ToArray());
             } catch {}
@@ -1425,6 +1465,9 @@ namespace ClaudeBarrier {
         [DllImport("iphlpapi.dll", ExactSpelling = true)]
         public static extern int GetBestInterface(uint destAddr, out uint bestIfIndex);
 
+        [DllImport("iphlpapi.dll", SetLastError = true)]
+        public static extern int NotifyAddrChange(IntPtr handle, IntPtr overlapped);
+
         private Label _lblWarpRouteVal;
         private bool _isSuspended = false;
         private int _watchdogTickCount = 0;
@@ -1433,6 +1476,10 @@ namespace ClaudeBarrier {
         private string _pinnedVpnIp = "";
         private string _pinnedAdapterName = "";
         private uint _pinnedAdapterIndex = 0;
+        private Thread _notifyAddrChangeThread = null;
+        private volatile bool _isTerminating = false;
+        private bool _isServiceIpcConnected = false;
+        private System.Threading.Timer _serviceHeartbeatTimer = null;
 
         public int CurrentPing = 0;
         public string CurrentIp = "...";
@@ -1493,6 +1540,8 @@ namespace ClaudeBarrier {
                     Log("LICENSE", "Лицензия подтверждена (Защищено Windows DPAPI). Запуск защиты.", Color.FromArgb(52, 211, 153));
                     StartAudit();
                     StartWatchdog();
+                    StartKernelNotifyAddrChangeHook();
+                    _serviceHeartbeatTimer = new System.Threading.Timer((st) => SendServiceHeartbeat(), null, 1000, 4000);
                     UpdateZapretUiState();
                 } else {
                     Log("LICENSE", "Барьер ожидает ввода лицензионного ключа. Получите ключ в @ClaudeBarrierBot.", Color.FromArgb(245, 158, 11));
@@ -1568,6 +1617,11 @@ namespace ClaudeBarrier {
                     // При полном выходе из барьера гасим Claude, чтобы не оставлять незащищенных сессий
                     KillClaudeProcessesInMemory();
                 } catch {}
+                _isTerminating = true;
+                if (_serviceHeartbeatTimer != null) {
+                    try { _serviceHeartbeatTimer.Dispose(); } catch {}
+                    _serviceHeartbeatTimer = null;
+                }
                 base.OnFormClosing(e);
             }
         }
@@ -3003,7 +3057,7 @@ namespace ClaudeBarrier {
         // Вкладка 3: Настройки (1:1 Cloudflare WARP с Toggle-переключателями и карточками)
         private void BuildSettingsPage(Panel page) {
             page.Controls.Clear();
-            page.AutoScroll = false;
+            page.AutoScroll = true;
 
             Label lblTitle = new Label() {
                 Text = "Настройки",
@@ -3017,7 +3071,7 @@ namespace ClaudeBarrier {
             // ================= CARD 1: ПАРАМЕТРЫ ЗАЩИТЫ =================
             Panel cardGeneral = new Panel() {
                 Location = new Point(32, 56),
-                Size = new Size(786, 204),
+                Size = new Size(786, 284),
                 BackColor = Color.FromArgb(19, 22, 32)
             };
             cardGeneral.Paint += (s, pe) => {
@@ -3033,6 +3087,8 @@ namespace ClaudeBarrier {
                     g.DrawLine(divPen, 20, 80, cardGeneral.Width - 20, 80);
                     g.DrawLine(divPen, 20, 120, cardGeneral.Width - 20, 120);
                     g.DrawLine(divPen, 20, 160, cardGeneral.Width - 20, 160);
+                    g.DrawLine(divPen, 20, 200, cardGeneral.Width - 20, 200);
+                    g.DrawLine(divPen, 20, 240, cardGeneral.Width - 20, 240);
                 }
             };
             page.Controls.Add(cardGeneral);
@@ -3126,9 +3182,9 @@ namespace ClaudeBarrier {
             };
             cardGeneral.Controls.Add(swKillswitch);
 
-            // Row 5: Служба превентивного завершения Claude (Sentinel Guard (Fail-Closed Watchdog))
+            // Row 5: Служба Sentinel Guard (Хук ядра NotifyAddrChange 0-5 мс)
             Label lblSentinel = new Label() {
-                Text = "Служба Sentinel Guard (мгновенное завершение Claude при отклонении IP)",
+                Text = "Служба Sentinel Guard (мгновенный хук ядра NotifyAddrChange <5 мс при смене маршрута)",
                 Font = new Font("Segoe UI", 9.5f),
                 ForeColor = Color.FromArgb(248, 250, 252),
                 Location = new Point(20, 171),
@@ -3148,9 +3204,53 @@ namespace ClaudeBarrier {
             };
             cardGeneral.Controls.Add(swSentinel);
 
+            // Row 6: Multi-Signal Engine (Триангуляция: процесс VPN + маршрут 0.0.0.0/0 + Pinned IP)
+            Label lblMultiSig = new Label() {
+                Text = "Multi-Signal триангуляция (правило 2 из 3: процесс VPN, адаптер ядра, Pinned IP)",
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 211),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardGeneral.Controls.Add(lblMultiSig);
+
+            WarpToggleSwitch swMultiSig = new WarpToggleSwitch() {
+                Location = new Point(722, 209),
+                Checked = _cfg.MultiSignalEnabled
+            };
+            swMultiSig.CheckedChanged += (s, e) => {
+                _cfg.MultiSignalEnabled = swMultiSig.Checked;
+                _cfg.Save();
+                Log("CONFIG", "Multi-Signal Triangulation: " + (_cfg.MultiSignalEnabled ? "АКТИВЕН" : "ОТКЛЮЧЕН"), Color.FromArgb(148, 163, 184));
+            };
+            cardGeneral.Controls.Add(swMultiSig);
+
+            // Row 7: Timezone Guard (Защита от утечки часового пояса)
+            Label lblTz = new Label() {
+                Text = "Timezone Guard (предотвращение блокировок Anthropic по расхождению часового пояса)",
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 251),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardGeneral.Controls.Add(lblTz);
+
+            WarpToggleSwitch swTz = new WarpToggleSwitch() {
+                Location = new Point(722, 249),
+                Checked = _cfg.TimezoneGuardEnabled
+            };
+            swTz.CheckedChanged += (s, e) => {
+                _cfg.TimezoneGuardEnabled = swTz.Checked;
+                _cfg.Save();
+                Log("CONFIG", "Timezone Guard: " + (_cfg.TimezoneGuardEnabled ? "АКТИВЕН" : "ОТКЛЮЧЕН"), Color.FromArgb(148, 163, 184));
+            };
+            cardGeneral.Controls.Add(swTz);
+
             // ================= CARD 2: ПУТИ К КЛИЕНТАМ CLAUDE И ZAPRET =================
             Panel cardPaths = new Panel() {
-                Location = new Point(32, 268),
+                Location = new Point(32, 355),
                 Size = new Size(786, 176),
                 BackColor = Color.FromArgb(19, 22, 32)
             };
@@ -3256,9 +3356,73 @@ namespace ClaudeBarrier {
             btnBrowseZapret.Location = new Point(646, 175);
             cardPaths.Controls.Add(btnBrowseZapret);
 
-            // ================= CARD 3: ЛИЦЕНЗИЯ И СЕТЕВАЯ БЕЗОПАСНОСТЬ WFP =================
+            // ================= CARD 3: СИСТЕМНАЯ СЛУЖБА WINDOWS (FAIL-CLOSED ДЕМОН) =================
+            Panel cardService = new Panel() {
+                Location = new Point(32, 545),
+                Size = new Size(786, 110),
+                BackColor = Color.FromArgb(19, 22, 32)
+            };
+            cardService.Paint += (s, pe) => {
+                Graphics g = pe.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, cardService.Width - 1, cardService.Height - 1);
+                using (GraphicsPath p = GraphicsUtils.CreateRoundedRectangle(r, 8)) {
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(19, 22, 32))) g.FillPath(b, p);
+                    using (Pen pen = new Pen(Color.FromArgb(34, 39, 56), 1f)) g.DrawPath(pen, p);
+                }
+                using (Pen divPen = new Pen(Color.FromArgb(28, 33, 48), 1f)) {
+                    g.DrawLine(divPen, 20, 52, cardService.Width - 20, 52);
+                }
+            };
+            page.Controls.Add(cardService);
+
+            Label lblSvcTitle = new Label() {
+                Text = "Системная служба ClaudeBarrier Service (SYSTEM Daemon & Named Pipe IPC)",
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 12),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardService.Controls.Add(lblSvcTitle);
+
+            bool isSvcInstalled = ClaudeBarrierServiceController.IsServiceInstalled();
+            bool isSvcRunning = ClaudeBarrierServiceController.IsServiceRunning();
+
+            Label lblSvcStatus = new Label() {
+                Text = isSvcRunning ? (_isServiceIpcConnected ? "Статус: Активна и защищает ядро (SYSTEM) • IPC соединен (Heartbeat 5s)" : "Статус: Активна и защищает ядро (SYSTEM) • Heartbeat 5s") : (isSvcInstalled ? "Статус: Установлена в системе (Остановлена)" : "Статус: Не установлена (Работа в автономном повышенном режиме)"),
+                Font = new Font("Segoe UI", 8.4f),
+                ForeColor = isSvcRunning ? Color.FromArgb(52, 211, 153) : (isSvcInstalled ? Color.FromArgb(251, 191, 36) : Color.FromArgb(148, 163, 184)),
+                Location = new Point(20, 32),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardService.Controls.Add(lblSvcStatus);
+
+            CloudflareButton btnSvcInstall = CreateWarpButton(isSvcInstalled ? "Удалить службу" : "Установить службу", 150, 32, (s, e) => {
+                if (isSvcInstalled) {
+                    ClaudeBarrierServiceController.UninstallService();
+                    MessageBox.Show("Системная служба ClaudeBarrier успешно удалена.", "ClaudeBarrier Service", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                } else {
+                    ClaudeBarrierServiceController.InstallService();
+                    MessageBox.Show("Системная служба ClaudeBarrier успешно зарегистрирована и запущена под учетной записью SYSTEM.", "ClaudeBarrier Service", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                BuildSettingsPage(page);
+            });
+            btnSvcInstall.Location = new Point(20, 64);
+            cardService.Controls.Add(btnSvcInstall);
+
+            CloudflareButton btnSvcStart = CreateWarpButton(isSvcRunning ? "Остановить" : "Запустить", 120, 32, (s, e) => {
+                if (isSvcRunning) ClaudeBarrierServiceController.StopService();
+                else ClaudeBarrierServiceController.StartService();
+                BuildSettingsPage(page);
+            });
+            btnSvcStart.Location = new Point(180, 64);
+            cardService.Controls.Add(btnSvcStart);
+
+            // ================= CARD 4: ЛИЦЕНЗИЯ И СЕТЕВАЯ БЕЗОПАСНОСТЬ WFP =================
             Panel cardLicense = new Panel() {
-                Location = new Point(32, 452),
+                Location = new Point(32, 670),
                 Size = new Size(786, 176),
                 BackColor = Color.FromArgb(19, 22, 32)
             };
@@ -3764,7 +3928,7 @@ namespace ClaudeBarrier {
         }
 
         private void LaunchClaudeDesktop() {
-            if (!ConfirmUnsafeLaunch("Claude Desktop")) return;
+            if (!RunSafeLauncherPreFlight("Claude Desktop")) return;
 
             string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string[] desktopCandidates = new string[] {
@@ -3813,13 +3977,13 @@ namespace ClaudeBarrier {
         }
 
         private void LaunchClaudeBrowser() {
-            if (!ConfirmUnsafeLaunch("Claude в браузере (claude.ai)")) return;
+            if (!RunSafeLauncherPreFlight("Claude в браузере (claude.ai)")) return;
             Process.Start("https://claude.ai");
             Log("LAUNCH", "Открыт Claude в браузере: https://claude.ai", Color.FromArgb(52, 211, 153));
         }
 
         private void LaunchClaudeCodeCli() {
-            if (!ConfirmUnsafeLaunch("Claude Code CLI (терминал)")) return;
+            if (!RunSafeLauncherPreFlight("Claude Code CLI (терминал)")) return;
 
             string target = _cfg.ClaudeCodePath;
             if (!string.IsNullOrEmpty(target) && File.Exists(target)) {
@@ -4643,6 +4807,10 @@ namespace ClaudeBarrier {
                     KillClaudeProcessesInMemory();
                 }
 
+                if (_watchdogTickCount % 3 == 0) {
+                    SendServiceHeartbeat();
+                }
+
                 ThreadPool.QueueUserWorkItem((st) => {
                     // 1. Проверка маршрута ядра к Anthropic (Bug 2 & 3)
                     string bestAdapterName, bestDesc;
@@ -4660,32 +4828,23 @@ namespace ClaudeBarrier {
                         }
                     } catch {}
 
-                    // 2. Sentinel Guard: проверка смены интерфейса или обрыва туннеля
-                    bool routeChanged = false;
-                    if (_cfg.SentinelGuardEnabled && _currentState == ProtectionState.Protected && _pinnedAdapterIndex != 0) {
-                        if (bestIfIndex != _pinnedAdapterIndex || !isVpnRoute) {
-                            routeChanged = true;
-                        }
-                    }
-
+                    // 2. Multi-Signal Triangulation & Sentinel Guard
+                    MultiSignalEvaluation eval = EvaluateMultiSignals(CurrentIp, _pinnedVpnIp, isVpnRoute, anyVpnUp, bestAdapterName);
                     bool isBlocked = IsAnthropicBlockedRegion(CurrentCountry, CurrentIp, "");
-                    if ((!anyVpnUp || !isVpnRoute || routeChanged || isBlocked) && _currentState == ProtectionState.Protected) {
+
+                    if ((eval.TriggerKill || isBlocked) && _currentState == ProtectionState.Protected) {
                         if (_cfg.KillSwitchEnabled || _cfg.SentinelGuardEnabled) {
-                            KillClaudeImmediately(routeChanged
-                                ? ("10x Sentinel: Маршрут ядра переключился с " + _pinnedAdapterName + " на " + bestAdapterName)
-                                : (!anyVpnUp ? "VPN-туннель разорван" : (isBlocked ? "Выходной IP в неподдерживаемом регионе" : "Маршрут ушел в обход VPN")));
+                            KillClaudeImmediately(isBlocked ? "Выходной IP в неподдерживаемом регионе" : eval.Reason);
                         }
 
                         SafeInvoke(() => {
-                            string reason = routeChanged
-                                ? ("10x Sentinel: Маршрут ядра ушел на " + bestAdapterName)
-                                : (isBlocked
-                                    ? ("Выходной IP в РФ / Беларуси (" + CurrentIp + ")!")
-                                    : (!anyVpnUp ? "Обрыв VPN: туннель неожиданно отключился!" : ("Маршрут ушел в обход VPN через " + bestAdapterName)));
+                            string reason = isBlocked
+                                ? ("Выходной IP в РФ / Беларуси (" + CurrentIp + ")!")
+                                : eval.Reason;
                             SetProtectionUIState(ProtectionState.BlockedLeaking, reason);
                         });
                         Log("KILLSWITCH", string.Format("СРОЧНАЯ БЛОКИРОВКА: {0}. Все запущенные процессы Claude немедленно завершены.",
-                            routeChanged ? ("Смена активного адаптера ядра на " + bestAdapterName) : (isBlocked ? ("Обнаружен IP в неподдерживаемом регионе (" + CurrentCountry + ")") : (!anyVpnUp ? "VPN-туннель разорван" : ("Маршрут направлен мимо туннеля через " + bestAdapterName)))), Color.FromArgb(248, 113, 113));
+                            isBlocked ? ("Обнаружен IP в неподдерживаемом регионе (" + CurrentCountry + ")") : eval.Reason), Color.FromArgb(248, 113, 113));
                     }
 
                     // 2.1 Sentinel Guard: Конкурентная проверка соответствия Pinned IP
@@ -4872,42 +5031,302 @@ namespace ClaudeBarrier {
             } catch {}
         }
 
-        private void KillClaudeImmediately(string reason) {
+        // ================= NEXT-GEN SENTINEL & KERNEL ENGINE =================
+        
+        // 1. Win32 NotifyAddrChange Hook (0-5 ms reaction time on any routing table change)
+        private void StartKernelNotifyAddrChangeHook() {
+            if (_notifyAddrChangeThread != null && _notifyAddrChangeThread.IsAlive) return;
+            _notifyAddrChangeThread = new Thread(() => {
+                while (!_isTerminating && !_isSuspended) {
+                    try {
+                        int res = NotifyAddrChange(IntPtr.Zero, IntPtr.Zero);
+                        if (res == 0 && !_isTerminating && !_isSuspended) {
+                            OnKernelNetworkRouteChanged();
+                        }
+                    } catch {
+                        Thread.Sleep(500);
+                    }
+                }
+            }) { IsBackground = true, Name = "ClaudeBarrier_KernelRouteHook" };
+            _notifyAddrChangeThread.Start();
+            Log("KERNEL", "Аппаратный хук ядра NotifyAddrChange (iphlpapi.dll) активирован (0-5 мс реакция).", Color.FromArgb(52, 211, 153));
+        }
+
+        private void OnKernelNetworkRouteChanged() {
+            if (_currentState == ProtectionState.Protected) {
+                string bestAdapterName, bestDesc;
+                bool isVpnRoute;
+                uint bestIfIndex;
+                CheckAnthropicRouting(out bestAdapterName, out bestDesc, out isVpnRoute, out bestIfIndex);
+
+                bool routeFlipped = false;
+                if (!isVpnRoute) routeFlipped = true;
+                if (_pinnedAdapterIndex != 0 && bestIfIndex != _pinnedAdapterIndex) routeFlipped = true;
+
+                if (routeFlipped) {
+                    KillClaudeImmediately("Хук ядра NotifyAddrChange (<5 мс): маршрут 0.0.0.0/0 ушел на " + bestAdapterName);
+                    SafeInvoke(() => {
+                        SetProtectionUIState(ProtectionState.BlockedLeaking, "Утечка маршрута: " + bestAdapterName);
+                    });
+                }
+            }
+        }
+
+        // 2. Multi-Signal Triangulation (2-of-3 Decision Engine)
+        public struct MultiSignalEvaluation {
+            public bool Signal1_VpnProcess;    // VPN Process
+            public bool Signal2_KernelRoute;   // Kernel Virtual Route 0.0.0.0/0
+            public bool Signal3_PinnedIp;      // Public IP matches Pinned IP
+            public int PassedCount;
+            public bool TriggerKill;
+            public string Reason;
+        }
+
+        private MultiSignalEvaluation EvaluateMultiSignals(string currentIp, string pinnedIp, bool isVpnRoute, bool anyVpnUp, string bestAdapterName) {
+            MultiSignalEvaluation ev = new MultiSignalEvaluation();
+
+            // Signal 1: VPN Process Check
+            ev.Signal1_VpnProcess = false;
             try {
-                int killed = 0;
+                string[] procs = (_cfg.VpnProcessList ?? "").Split(new char[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                HashSet<string> targetSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string s in procs) targetSet.Add(s.Replace(".exe", "").Trim());
+
+                if (targetSet.Count > 0) {
+                    foreach (Process p in Process.GetProcesses()) {
+                        try {
+                            if (targetSet.Contains(p.ProcessName)) {
+                                ev.Signal1_VpnProcess = true;
+                                break;
+                            }
+                        } catch {}
+                    }
+                } else {
+                    ev.Signal1_VpnProcess = anyVpnUp;
+                }
+            } catch {
+                ev.Signal1_VpnProcess = false;
+            }
+
+            // Signal 2: Kernel Route & Virtual Interface Status
+            ev.Signal2_KernelRoute = (isVpnRoute && anyVpnUp);
+
+            // Signal 3: Pinned IP Match
+            if (string.IsNullOrEmpty(pinnedIp) || pinnedIp == "..." || pinnedIp == "Не определен") {
+                ev.Signal3_PinnedIp = true;
+            } else {
+                ev.Signal3_PinnedIp = string.Equals(currentIp, pinnedIp, StringComparison.OrdinalIgnoreCase);
+            }
+
+            ev.PassedCount = (ev.Signal1_VpnProcess ? 1 : 0) + (ev.Signal2_KernelRoute ? 1 : 0) + (ev.Signal3_PinnedIp ? 1 : 0);
+
+            // Decision Logic
+            if (!ev.Signal2_KernelRoute) {
+                ev.TriggerKill = true;
+                ev.Reason = "Маршрут ядра 0.0.0.0/0 направлен мимо туннеля через: " + bestAdapterName;
+                return ev;
+            }
+
+            if (!ev.Signal3_PinnedIp) {
+                ev.TriggerKill = true;
+                ev.Reason = "Утечка IP адреса! Текущий " + currentIp + " != Pinned " + pinnedIp;
+                return ev;
+            }
+
+            if (_cfg.MultiSignalEnabled && ev.PassedCount < 2) {
+                ev.TriggerKill = true;
+                ev.Reason = "Сбой Multi-Signal триангуляции (активно " + ev.PassedCount + "/3 сигналов)";
+                return ev;
+            }
+
+            ev.TriggerKill = false;
+            ev.Reason = "Все сигналы безопасности в норме (" + ev.PassedCount + "/3)";
+            return ev;
+        }
+
+        // 3. Timezone Guard (Антифрод-защита от утечки таймзоны)
+        public static bool CheckTimezoneMismatch(string vpnCountry, out string warning) {
+            warning = string.Empty;
+            try {
+                TimeZoneInfo tz = TimeZoneInfo.Local;
+                string tzId = tz.Id.ToLowerInvariant();
+                string tzName = tz.StandardName.ToLowerInvariant();
+                TimeSpan offset = tz.GetUtcOffset(DateTime.UtcNow);
+
+                bool isRuTimezone = tzId.Contains("russian") || tzId.Contains("moscow") || tzName.Contains("московск") ||
+                                    tzId.Contains("minsk") || tzId.Contains("belarus") ||
+                                    (offset.TotalHours == 3 && (tzId.Contains("standard") || tzId.Contains("russia")));
+
+                string vc = (vpnCountry ?? "").ToLowerInvariant();
+                bool isWesternVpn = vc.Contains("united states") || vc.Contains("usa") || vc.Contains("germany") ||
+                                    vc.Contains("netherlands") || vc.Contains("sweden") || vc.Contains("france") ||
+                                    vc.Contains("united kingdom") || vc.Contains("finland") || vc.Contains("poland");
+
+                if (isRuTimezone && isWesternVpn) {
+                    warning = string.Format("Обнаружен Timezone Leak! Системный часовой пояс ({0}, UTC{1:+00;-00}) не совпадает с геопозицией VPN ({2}). Системы антифрода Anthropic блокируют такие сессии.",
+                        tz.DisplayName, (int)offset.TotalHours, vpnCountry);
+                    return true;
+                }
+            } catch {}
+            return false;
+        }
+
+        // 4. Safe Launcher Pre-Flight Audit
+        private bool RunSafeLauncherPreFlight(string targetAppName) {
+            if (_currentState != ProtectionState.Protected) {
+                ShowSafeLaunchBlockDialog(targetAppName, "Защитный барьер ClaudeBarrier не активен или туннель разорван.");
+                return false;
+            }
+
+            string bestAdapterName, bestDesc;
+            bool isVpnRoute;
+            uint bestIfIndex;
+            CheckAnthropicRouting(out bestAdapterName, out bestDesc, out isVpnRoute, out bestIfIndex);
+            if (!isVpnRoute) {
+                ShowSafeLaunchBlockDialog(targetAppName, "Маршрут ядра 0.0.0.0/0 направлен мимо туннеля через: " + bestAdapterName);
+                return false;
+            }
+
+            if (IsAnthropicBlockedRegion(CurrentCountry, CurrentIp, "")) {
+                ShowSafeLaunchBlockDialog(targetAppName, "Выходной IP находится в неподдерживаемом регионе (" + CurrentCountry + ", " + CurrentIp + "). Anthropic сразу же заблокирует доступ!");
+                return false;
+            }
+
+            if (!string.IsNullOrEmpty(_pinnedVpnIp) && !string.Equals(CurrentIp, _pinnedVpnIp, StringComparison.OrdinalIgnoreCase)) {
+                ShowSafeLaunchBlockDialog(targetAppName, "Обнаружена утечка IP! Текущий: " + CurrentIp + ", Зафиксированный VPN: " + _pinnedVpnIp);
+                return false;
+            }
+
+            if (CurrentPing <= 0) {
+                ShowSafeLaunchBlockDialog(targetAppName, "Таймаут соединения с серверами api.anthropic.com:443. Доступ заблокирован.");
+                return false;
+            }
+
+            string tzWarn;
+            if (_cfg.TimezoneGuardEnabled && CheckTimezoneMismatch(CurrentCountry, out tzWarn)) {
+                DialogResult dr = MessageBox.Show(
+                    tzWarn + "\n\nПродолжить запуск " + targetAppName + " под вашу ответственность?",
+                    "ClaudeBarrier // Timezone Guard Предупреждение",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+                if (dr != DialogResult.Yes) return false;
+            }
+
+            return true;
+        }
+
+        private void ShowSafeLaunchBlockDialog(string targetApp, string reason) {
+            string msg = string.Format(
+                "БЕЗОПАСНЫЙ ЗАПУСК ЗАБЛОКИРОВАН (Safe Launcher Pre-Flight):\n\n" +
+                "Приложение: {0}\n" +
+                "Причина отказа: {1}\n\n" +
+                "• Нажмите [Да], чтобы открыть сетевые подключения Windows (ncpa.cpl).\n" +
+                "• Нажмите [Нет], чтобы отменить запуск и не рисковать баном.",
+                targetApp, reason);
+
+            DialogResult res = MessageBox.Show(
+                msg,
+                "ClaudeBarrier Safe Launcher // Защита от бана",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Stop);
+
+            if (res == DialogResult.Yes) {
+                try { Process.Start("ncpa.cpl"); } catch {}
+            }
+        }
+
+        // 5. IPC Heartbeat Sender to Windows Service
+        private void SendServiceHeartbeat() {
+            ThreadPool.QueueUserWorkItem((st) => {
+                try {
+                    using (NamedPipeClientStream client = new NamedPipeClientStream(".", ClaudeBarrierWindowsService.PIPE_NAME, PipeDirection.InOut)) {
+                        client.Connect(300);
+                        using (StreamWriter sw = new StreamWriter(client, Encoding.UTF8) { AutoFlush = true })
+                        using (StreamReader sr = new StreamReader(client, Encoding.UTF8)) {
+                            sw.WriteLine("HEARTBEAT");
+                            string resp = sr.ReadLine();
+                            if (resp == "HEARTBEAT_ACK") {
+                                _isServiceIpcConnected = true;
+                            }
+                        }
+                    }
+                } catch {
+                    _isServiceIpcConnected = false;
+                }
+            });
+        }
+
+        // 6. Two-Stage Process Killer (Graceful WM_CLOSE -> Force Kill Verified PIDs)
+        public static void ExecuteTwoStageKill(string reason) {
+            try {
+                List<int> targetPids = new List<int>();
                 foreach (Process p in Process.GetProcesses()) {
                     try {
                         string name = p.ProcessName.ToLowerInvariant();
-                        bool shouldKill = false;
+                        bool match = false;
                         if (name == "claude" || name == "claude-desktop" || name == "claude_desktop" ||
                             name == "claude_dummy" || name.StartsWith("claude-") || name.StartsWith("claude_")) {
-                            shouldKill = true;
+                            match = true;
                         } else if (name == "node") {
                             try {
                                 string title = p.MainWindowTitle.ToLowerInvariant();
-                                if (title.Contains("claude")) shouldKill = true;
+                                if (title.Contains("claude")) match = true;
                             } catch {}
                         }
 
-                        if (shouldKill) {
-                            p.Kill();
-                            killed++;
+                        if (match && p.Id > 0 && !targetPids.Contains(p.Id)) {
+                            targetPids.Add(p.Id);
                         }
                     } catch {}
                 }
 
-                if (_cfg.KillSwitchEnabled || _cfg.SentinelGuardEnabled) {
-                    KillBrowserClaudeSessions();
-                }
+                if (targetPids.Count > 0) {
+                    // Stage 1: Graceful close
+                    EnumWindows((hWnd, lParam) => {
+                        try {
+                            uint pid;
+                            GetWindowThreadProcessId(hWnd, out pid);
+                            if (targetPids.Contains((int)pid)) {
+                                PostMessage(hWnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+                            }
+                        } catch {}
+                        return true;
+                    }, IntPtr.Zero);
 
-                RefreshSystemTray();
+                    // Stage 2: Brief pause (150 ms)
+                    Thread.Sleep(150);
 
-                if (killed > 0) {
-                    SafeInvoke(() => {
-                        Log("SENTINEL", string.Format("10x SENTINEL: Выгружено {0} процессов Claude из памяти (<15 мс). Причина: {1}", killed, reason), Color.FromArgb(248, 113, 113));
-                    });
+                    // Stage 3: Force-kill verified PIDs
+                    foreach (int pid in targetPids) {
+                        try {
+                            using (Process p = Process.GetProcessById(pid)) {
+                                string name = p.ProcessName.ToLowerInvariant();
+                                if (name == "claude" || name == "claude-desktop" || name == "claude_desktop" ||
+                                    name.StartsWith("claude-") || name == "node") {
+                                    p.Kill();
+                                }
+                            }
+                        } catch {}
+                    }
                 }
             } catch {}
+        }
+
+        private void KillClaudeImmediately(string reason) {
+            ExecuteTwoStageKill(reason);
+
+            if (_cfg.KillSwitchEnabled || _cfg.SentinelGuardEnabled) {
+                KillBrowserClaudeSessions();
+            }
+
+            RefreshSystemTray();
+
+            SafeInvoke(() => {
+                Log("SENTINEL", string.Format("SENTINEL GUARD (<5 мс): {0}", reason), Color.FromArgb(248, 113, 113));
+                if (_trayIcon != null) {
+                    _trayIcon.ShowBalloonTip(3000, "ClaudeBarrier Sentinel", "Процессы Claude превентивно завершены: " + reason, ToolTipIcon.Warning);
+                }
+            });
         }
 
         private void KillClaudeProcessesInMemory() {
@@ -5146,6 +5565,269 @@ namespace ClaudeBarrier {
                     Interlocked.Exchange(ref _isApplyingFirewallRules, 0);
                 }
             });
+        }
+        public static uint IpToUint(string ipAddress) {
+            try {
+                IPAddress ip = IPAddress.Parse(ipAddress);
+                byte[] bytes = ip.GetAddressBytes();
+                return (uint)(bytes[3] << 24 | bytes[2] << 16 | bytes[1] << 8 | bytes[0]);
+            } catch { return 0; }
+        }
+
+        public static int GetFirewallRuleCountFromRegistryStatic() {
+            int count = 0;
+            try {
+                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules")) {
+                    if (key != null) {
+                        foreach (string valName in key.GetValueNames()) {
+                            object obj = key.GetValue(valName);
+                            if (obj != null) {
+                                string valStr = obj.ToString();
+                                if (valStr.IndexOf("Claude-Shield", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    valName.IndexOf("Claude-Shield", StringComparison.OrdinalIgnoreCase) >= 0) {
+                                    count++;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch {}
+            return count;
+        }
+
+        public static void RemoveFirewallRulesStatic() {
+            try {
+                ProcessStartInfo psi = new ProcessStartInfo {
+                    FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe"),
+                    Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" +
+                        "$ErrorActionPreference = 'SilentlyContinue'; " +
+                        "Get-NetFirewallRule | Where-Object { $_.Name -like 'Claude-Shield*' -or $_.DisplayName -like 'Claude-Shield*' } | Remove-NetFirewallRule; " +
+                        "Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -like 'Claude-Shield*' -or (Get-ItemPropertyValue 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' $_.Name) -like '*Claude-Shield*' } | ForEach-Object { Remove-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules' -Name $_.Name };\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                };
+                Process p = Process.Start(psi);
+                p.WaitForExit(8000);
+            } catch {}
+        }
+
+        public static void ApplyBootTimeWfpIsolation() {
+            try {
+                string script = 
+                    "$ErrorActionPreference = 'SilentlyContinue'; " +
+                    "Get-NetFirewallRule | Where-Object { $_.Name -like 'Claude-Shield*' -or $_.DisplayName -like 'Claude-Shield*' } | Remove-NetFirewallRule; " +
+                    "$vpnPattern = 'Wintun|WireGuard|TAP|TUN|Virtual|Tailscale|Amnezia|WARP|Mullvad|Proton|Neko|Sing-box|Clash|v2ray|Hiddify|VPN|wwan'; " +
+                    "$adapters = @(Get-NetAdapter | Where-Object { $_.InterfaceDescription -notmatch $vpnPattern -and $_.Name -notmatch $vpnPattern -and $_.Status -ne 'Disabled' } | Select-Object -ExpandProperty Name); " +
+                    "foreach ($a in $adapters) { " +
+                    "  $id = ($a -replace '[^a-zA-Z0-9]','_'); " +
+                    "  New-NetFirewallRule -Name ('Claude-Shield-IPv4-' + $id) -DisplayName ('Claude-Shield-Block-IPv4-' + $a) -Direction Outbound -RemoteAddress '160.79.104.0/23' -InterfaceAlias $a -Action Block | Out-Null; " +
+                    "  New-NetFirewallRule -Name ('Claude-Shield-IPv6-' + $id) -DisplayName ('Claude-Shield-Block-IPv6-' + $a) -Direction Outbound -RemoteAddress '2607:6bc0::/32' -InterfaceAlias $a -Action Block | Out-Null; " +
+                    "  New-NetFirewallRule -Name ('Claude-Shield-App-' + $id) -DisplayName ('Claude-Shield-Block-App-' + $a) -Direction Outbound -Program 'Claude.exe' -InterfaceAlias $a -Action Block | Out-Null; " +
+                    "  New-NetFirewallRule -Name ('Claude-Shield-Desk-' + $id) -DisplayName ('Claude-Shield-Block-Desk-' + $a) -Direction Outbound -Program 'claude-desktop.exe' -InterfaceAlias $a -Action Block | Out-Null; " +
+                    "  New-NetFirewallRule -Name ('Claude-Shield-CLI-' + $id) -DisplayName ('Claude-Shield-Block-CLI-' + $a) -Direction Outbound -Program 'claude.exe' -InterfaceAlias $a -Action Block | Out-Null; " +
+                    "} " +
+                    "Clear-DnsClientCache";
+
+                ProcessStartInfo psi = new ProcessStartInfo {
+                    FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe"),
+                    Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" + script + "\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                };
+                Process proc = Process.Start(psi);
+                proc.WaitForExit(10000);
+            } catch {}
+        }
+    }
+
+    // ================= WINDOWS SERVICE DAEMON & IPC HOST =================
+
+    public class ClaudeBarrierWindowsService : ServiceBase {
+        public const string SERVICE_NAME = "ClaudeBarrierService";
+        public const string PIPE_NAME = "ClaudeBarrierServicePipe";
+
+        private Thread _pipeServerThread;
+        private Thread _routeHookThread;
+        private System.Threading.Timer _heartbeatCheckTimer;
+        private volatile bool _isStopping = false;
+        private DateTime _lastHeartbeatTime = DateTime.UtcNow;
+
+        public ClaudeBarrierWindowsService() {
+            ServiceName = SERVICE_NAME;
+            CanStop = true;
+            CanShutdown = true;
+            AutoLog = false;
+        }
+
+        protected override void OnStart(string[] args) {
+            _isStopping = false;
+            _lastHeartbeatTime = DateTime.UtcNow;
+
+            MainWindow.ApplyBootTimeWfpIsolation();
+
+            _pipeServerThread = new Thread(PipeServerWorker) { IsBackground = true, Name = "ClaudeBarrier_ServicePipe" };
+            _pipeServerThread.Start();
+
+            _routeHookThread = new Thread(RouteHookWorker) { IsBackground = true, Name = "ClaudeBarrier_ServiceRouteHook" };
+            _routeHookThread.Start();
+
+            _heartbeatCheckTimer = new System.Threading.Timer(CheckHeartbeatTimeout, null, 5000, 5000);
+        }
+
+        protected override void OnStop() {
+            _isStopping = true;
+            try {
+                if (_heartbeatCheckTimer != null) _heartbeatCheckTimer.Dispose();
+            } catch {}
+        }
+
+        private void CheckHeartbeatTimeout(object state) {
+            if (_isStopping) return;
+            TimeSpan elapsed = DateTime.UtcNow - _lastHeartbeatTime;
+            if (elapsed.TotalSeconds > 15) {
+                MainWindow.ApplyBootTimeWfpIsolation();
+            }
+        }
+
+        private void RouteHookWorker() {
+            while (!_isStopping) {
+                try {
+                    int ret = MainWindow.NotifyAddrChange(IntPtr.Zero, IntPtr.Zero);
+                    if (ret == 0 && !_isStopping) {
+                        uint ifIndex;
+                        uint anthropicAddr = MainWindow.IpToUint("160.79.104.10");
+                        if (MainWindow.GetBestInterface(anthropicAddr, out ifIndex) == 0) {
+                            MainWindow.ExecuteTwoStageKill("Служба ядра NotifyAddrChange: Маршрут Anthropic направлен на физический интерфейс");
+                        }
+                    }
+                } catch {
+                    Thread.Sleep(1000);
+                }
+            }
+        }
+
+        private void PipeServerWorker() {
+            while (!_isStopping) {
+                try {
+                    using (NamedPipeServerStream server = new NamedPipeServerStream(
+                        PIPE_NAME,
+                        PipeDirection.InOut,
+                        1,
+                        PipeTransmissionMode.Byte,
+                        PipeOptions.Asynchronous)) {
+
+                        server.WaitForConnection();
+                        using (StreamReader sr = new StreamReader(server, Encoding.UTF8))
+                        using (StreamWriter sw = new StreamWriter(server, Encoding.UTF8) { AutoFlush = true }) {
+                            string msg = sr.ReadLine();
+                            if (!string.IsNullOrEmpty(msg)) {
+                                msg = msg.Trim();
+                                if (msg == "HEARTBEAT") {
+                                    _lastHeartbeatTime = DateTime.UtcNow;
+                                    sw.WriteLine("HEARTBEAT_ACK");
+                                } else if (msg == "GET_STATUS") {
+                                    int ruleCount = MainWindow.GetFirewallRuleCountFromRegistryStatic();
+                                    sw.WriteLine("STATUS|OK|" + ruleCount);
+                                } else if (msg == "APPLY_WFP") {
+                                    MainWindow.ApplyBootTimeWfpIsolation();
+                                    sw.WriteLine("APPLY_OK");
+                                } else if (msg == "REMOVE_WFP") {
+                                    MainWindow.RemoveFirewallRulesStatic();
+                                    sw.WriteLine("REMOVE_OK");
+                                } else if (msg == "KILL_CLAUDE") {
+                                    MainWindow.ExecuteTwoStageKill("Команда IPC от интерфейса");
+                                    sw.WriteLine("KILL_OK");
+                                }
+                            }
+                        }
+                    }
+                } catch {
+                    if (!_isStopping) Thread.Sleep(500);
+                }
+            }
+        }
+    }
+
+    public static class ClaudeBarrierServiceController {
+        public const string SERVICE_NAME = "ClaudeBarrierService";
+
+        public static bool IsServiceInstalled() {
+            try {
+                using (ServiceController sc = new ServiceController(SERVICE_NAME)) {
+                    var s = sc.Status;
+                    return true;
+                }
+            } catch {
+                return false;
+            }
+        }
+
+        public static bool IsServiceRunning() {
+            try {
+                using (ServiceController sc = new ServiceController(SERVICE_NAME)) {
+                    return sc.Status == ServiceControllerStatus.Running;
+                }
+            } catch {
+                return false;
+            }
+        }
+
+        public static bool InstallService() {
+            try {
+                string exe = Application.ExecutablePath;
+                string binPath = "\"" + exe + "\" --service";
+                ProcessStartInfo psi = new ProcessStartInfo {
+                    FileName = "sc.exe",
+                    Arguments = string.Format("create {0} binPath= \"{1}\" start= auto DisplayName= \"ClaudeBarrier Sentinel Service\"", SERVICE_NAME, binPath),
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+                Process p = Process.Start(psi);
+                p.WaitForExit(5000);
+                StartService();
+                return true;
+            } catch { return false; }
+        }
+
+        public static bool UninstallService() {
+            try {
+                StopService();
+                ProcessStartInfo psi = new ProcessStartInfo {
+                    FileName = "sc.exe",
+                    Arguments = "delete " + SERVICE_NAME,
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+                Process p = Process.Start(psi);
+                p.WaitForExit(5000);
+                return true;
+            } catch { return false; }
+        }
+
+        public static bool StartService() {
+            try {
+                using (ServiceController sc = new ServiceController(SERVICE_NAME)) {
+                    if (sc.Status != ServiceControllerStatus.Running && sc.Status != ServiceControllerStatus.StartPending) {
+                        sc.Start();
+                        sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(5));
+                    }
+                    return true;
+                }
+            } catch { return false; }
+        }
+
+        public static bool StopService() {
+            try {
+                using (ServiceController sc = new ServiceController(SERVICE_NAME)) {
+                    if (sc.Status == ServiceControllerStatus.Running) {
+                        sc.Stop();
+                        sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(5));
+                    }
+                    return true;
+                }
+            } catch { return false; }
         }
     }
 }
