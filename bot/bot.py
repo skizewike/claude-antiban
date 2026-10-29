@@ -131,7 +131,7 @@ def get_download_keyboard():
     return {
         "keyboard": [
             [{"text": "💻 Windows Установщик (.exe)"}],
-            [{"text": "📦 Windows Portable (.zip)"}, {"text": "📱 Android App (.apk)"}],
+            [{"text": "📦 Windows Portable (.zip)"}],
             [{"text": "🌐 GitHub Releases"}],
             [{"text": "◀️ Назад в главное меню"}]
         ],
@@ -340,7 +340,6 @@ def handle_update(up):
             f"Выберите нужную версию для загрузки:\n\n"
             f"• <b>Windows Установщик (x64)</b> — автоматическая инсталляция, интеграция в трей и автозапуск.\n"
             f"• <b>Windows Портативная (.zip)</b> — запуск без установки из любой папки.\n"
-            f"• <b>Android Приложение (.apk)</b> — мобильный компаньон.\n\n"
             f"🌐 Все релизы и контрольные суммы SHA-256 доступны на GitHub:\n"
             f"https://github.com/skizewike/claude-antiban/releases"
         )
@@ -366,16 +365,6 @@ def handle_update(up):
             f"📦 <b>Портативная версия без установки:</b>\n\n"
             f"🔗 <a href=\"{url}\">Скачать ClaudeBarrier-Windows-Portable-x64.zip</a>\n\n"
             f"• Распакуйте в любую удобную папку и запустите <code>ClaudeBarrier.exe</code> от имени администратора."
-        )
-        send_message(chat_id, msg, get_download_keyboard())
-        return
-
-    # Скачать: Android APK
-    if text == "📱 Android App (.apk)":
-        url = "https://github.com/skizewike/claude-antiban/releases/download/latest/download/ClaudeBarrier-Android.apk"
-        msg = (
-            f"📱 <b>Мобильное приложение для Android:</b>\n\n"
-            f"🔗 <a href=\"{url}\">Скачать ClaudeBarrier-Android.apk</a>"
         )
         send_message(chat_id, msg, get_download_keyboard())
         return

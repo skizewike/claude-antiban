@@ -289,6 +289,7 @@ namespace ClaudeBarrier {
         public string ZapretArgs = "--wf-tcp=443 --dpi-desync=split2 --dpi-desync-split-pos=1 --dpi-desync-fooling=badseq";
         public bool AutoStartZapret = false;
         public bool KillSwitchEnabled = true;
+        public bool SentinelGuardEnabled = true;
 
         private string ConfigPath {
             get {
@@ -317,6 +318,7 @@ namespace ClaudeBarrier {
                             else if (k == "ZapretArgs") ZapretArgs = v;
                             else if (k == "AutoStartZapret") AutoStartZapret = (v == "1" || v.ToLower() == "true");
                             else if (k == "KillSwitchEnabled") KillSwitchEnabled = (v == "1" || v.ToLower() == "true");
+                            else if (k == "SentinelGuardEnabled") SentinelGuardEnabled = (v == "1" || v.ToLower() == "true");
                         }
                     }
                 }
@@ -334,7 +336,8 @@ namespace ClaudeBarrier {
                     "ZapretPath=" + (ZapretPath ?? ""),
                     "ZapretArgs=" + (ZapretArgs ?? ""),
                     "AutoStartZapret=" + (AutoStartZapret ? "1" : "0"),
-                    "KillSwitchEnabled=" + (KillSwitchEnabled ? "1" : "0")
+                    "KillSwitchEnabled=" + (KillSwitchEnabled ? "1" : "0"),
+                    "SentinelGuardEnabled=" + (SentinelGuardEnabled ? "1" : "0")
                 };
                 File.WriteAllLines(ConfigPath, lines.ToArray());
             } catch {}
@@ -1425,6 +1428,11 @@ namespace ClaudeBarrier {
         private Label _lblWarpRouteVal;
         private bool _isSuspended = false;
         private int _watchdogTickCount = 0;
+
+        // Sentinel Guard Pinned IP & State Lock
+        private string _pinnedVpnIp = "";
+        private string _pinnedAdapterName = "";
+        private uint _pinnedAdapterIndex = 0;
 
         public int CurrentPing = 0;
         public string CurrentIp = "...";
@@ -3008,8 +3016,8 @@ namespace ClaudeBarrier {
 
             // ================= CARD 1: ПАРАМЕТРЫ ЗАЩИТЫ =================
             Panel cardGeneral = new Panel() {
-                Location = new Point(32, 68),
-                Size = new Size(786, 176),
+                Location = new Point(32, 56),
+                Size = new Size(786, 204),
                 BackColor = Color.FromArgb(19, 22, 32)
             };
             cardGeneral.Paint += (s, pe) => {
@@ -3021,9 +3029,10 @@ namespace ClaudeBarrier {
                     using (Pen pen = new Pen(Color.FromArgb(34, 39, 56), 1f)) g.DrawPath(pen, p);
                 }
                 using (Pen divPen = new Pen(Color.FromArgb(28, 33, 48), 1f)) {
-                    g.DrawLine(divPen, 20, 44, cardGeneral.Width - 20, 44);
-                    g.DrawLine(divPen, 20, 88, cardGeneral.Width - 20, 88);
-                    g.DrawLine(divPen, 20, 132, cardGeneral.Width - 20, 132);
+                    g.DrawLine(divPen, 20, 40, cardGeneral.Width - 20, 40);
+                    g.DrawLine(divPen, 20, 80, cardGeneral.Width - 20, 80);
+                    g.DrawLine(divPen, 20, 120, cardGeneral.Width - 20, 120);
+                    g.DrawLine(divPen, 20, 160, cardGeneral.Width - 20, 160);
                 }
             };
             page.Controls.Add(cardGeneral);
@@ -3033,14 +3042,14 @@ namespace ClaudeBarrier {
                 Text = "Сворачивать в системный трей при нажатии кнопки закрытия [✕]",
                 Font = new Font("Segoe UI", 9.5f),
                 ForeColor = Color.FromArgb(248, 250, 252),
-                Location = new Point(20, 13),
+                Location = new Point(20, 11),
                 AutoSize = true,
                 BackColor = Color.Transparent
             };
             cardGeneral.Controls.Add(lblTray);
 
             WarpToggleSwitch swTray = new WarpToggleSwitch() {
-                Location = new Point(722, 11),
+                Location = new Point(722, 9),
                 Checked = _cfg.MinimizeToTrayOnClose
             };
             swTray.CheckedChanged += (s, e) => {
@@ -3055,14 +3064,14 @@ namespace ClaudeBarrier {
                 Text = "Автозапуск барьера защиты при старте операционной системы Windows",
                 Font = new Font("Segoe UI", 9.5f),
                 ForeColor = Color.FromArgb(248, 250, 252),
-                Location = new Point(20, 57),
+                Location = new Point(20, 51),
                 AutoSize = true,
                 BackColor = Color.Transparent
             };
             cardGeneral.Controls.Add(lblAuto);
 
             WarpToggleSwitch swAuto = new WarpToggleSwitch() {
-                Location = new Point(722, 55),
+                Location = new Point(722, 49),
                 Checked = _cfg.AutoStartWithWindows
             };
             swAuto.CheckedChanged += (s, e) => {
@@ -3078,14 +3087,14 @@ namespace ClaudeBarrier {
                 Text = "Автоматический запуск службы Zapret DPI Bypass при включении защиты",
                 Font = new Font("Segoe UI", 9.5f),
                 ForeColor = Color.FromArgb(248, 250, 252),
-                Location = new Point(20, 101),
+                Location = new Point(20, 91),
                 AutoSize = true,
                 BackColor = Color.Transparent
             };
             cardGeneral.Controls.Add(lblZapret);
 
             WarpToggleSwitch swZapret = new WarpToggleSwitch() {
-                Location = new Point(722, 99),
+                Location = new Point(722, 89),
                 Checked = _cfg.AutoStartZapret
             };
             swZapret.CheckedChanged += (s, e) => {
@@ -3100,14 +3109,14 @@ namespace ClaudeBarrier {
                 Text = "Аварийный KillSwitch (мгновенная блокировка сокетов при разрыве VPN)",
                 Font = new Font("Segoe UI", 9.5f),
                 ForeColor = Color.FromArgb(248, 250, 252),
-                Location = new Point(20, 145),
+                Location = new Point(20, 131),
                 AutoSize = true,
                 BackColor = Color.Transparent
             };
             cardGeneral.Controls.Add(lblKillswitch);
 
             WarpToggleSwitch swKillswitch = new WarpToggleSwitch() {
-                Location = new Point(722, 143),
+                Location = new Point(722, 129),
                 Checked = _cfg.KillSwitchEnabled
             };
             swKillswitch.CheckedChanged += (s, e) => {
@@ -3117,10 +3126,32 @@ namespace ClaudeBarrier {
             };
             cardGeneral.Controls.Add(swKillswitch);
 
+            // Row 5: Служба превентивного завершения Claude (Sentinel Guard (Fail-Closed Watchdog))
+            Label lblSentinel = new Label() {
+                Text = "Служба Sentinel Guard (мгновенное завершение Claude при отклонении IP)",
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = Color.FromArgb(248, 250, 252),
+                Location = new Point(20, 171),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            cardGeneral.Controls.Add(lblSentinel);
+
+            WarpToggleSwitch swSentinel = new WarpToggleSwitch() {
+                Location = new Point(722, 169),
+                Checked = _cfg.SentinelGuardEnabled
+            };
+            swSentinel.CheckedChanged += (s, e) => {
+                _cfg.SentinelGuardEnabled = swSentinel.Checked;
+                _cfg.Save();
+                Log("CONFIG", "Sentinel Guard: " + (_cfg.SentinelGuardEnabled ? "АКТИВЕН" : "ОТКЛЮЧЕН"), Color.FromArgb(148, 163, 184));
+            };
+            cardGeneral.Controls.Add(swSentinel);
+
             // ================= CARD 2: ПУТИ К КЛИЕНТАМ CLAUDE И ZAPRET =================
             Panel cardPaths = new Panel() {
-                Location = new Point(32, 258),
-                Size = new Size(786, 216),
+                Location = new Point(32, 268),
+                Size = new Size(786, 176),
                 BackColor = Color.FromArgb(19, 22, 32)
             };
             cardPaths.Paint += (s, pe) => {
@@ -3227,8 +3258,8 @@ namespace ClaudeBarrier {
 
             // ================= CARD 3: ЛИЦЕНЗИЯ И СЕТЕВАЯ БЕЗОПАСНОСТЬ WFP =================
             Panel cardLicense = new Panel() {
-                Location = new Point(32, 488),
-                Size = new Size(786, 180),
+                Location = new Point(32, 452),
+                Size = new Size(786, 176),
                 BackColor = Color.FromArgb(19, 22, 32)
             };
             cardLicense.Paint += (s, pe) => {
@@ -4481,11 +4512,15 @@ namespace ClaudeBarrier {
                         } else {
                             // ТОЛЬКО ПРИ ВЫПОЛНЕНИИ ВСЕХ УСЛОВИЙ вход безопасен!
                             SetProtectionUIState(ProtectionState.Protected, "Защита активна");
+                            _pinnedVpnIp = ipStr;
+                            _pinnedAdapterName = bestAdapterName;
+                            _pinnedAdapterIndex = bestIfIndex;
                             if (_lblWarpIpVal != null) {
-                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ")";
+                                _lblWarpIpVal.Text = ipStr + " (" + countryStr + ") • Pinned Lock [OK]";
                                 _lblWarpIpVal.ForeColor = Color.FromArgb(52, 211, 153);
                             }
                             Log("SECURITY", "АУДИТ СЕТИ: Трафик изолирован через " + bestAdapterName + " (" + countryStr + ", " + ipStr + ", " + pingMs + " мс). Запуск Claude разрешен.", Color.FromArgb(52, 211, 153));
+                            Log("SENTINEL", string.Format("10x SENTINEL: Доверенный Pinned IP зафиксирован ({0} на адаптере {1}). Защита от утечек активна.", _pinnedVpnIp, _pinnedAdapterName), Color.FromArgb(52, 211, 153));
                         }
 
                         // Проверка DNS
@@ -4519,6 +4554,55 @@ namespace ClaudeBarrier {
                     });
                 }
             });
+        }
+
+                // Fail-Closed Sentinel Architecture: Параллельный опрос независимых гео-эндпоинтов без задержек
+        private static string ResolvePublicIpConcurrent(int timeoutMs) {
+            string[] endpoints = new string[] {
+                "https://api.ipify.org",
+                "https://ifconfig.me/ip",
+                "https://ipinfo.io/ip",
+                "https://icanhazip.com"
+            };
+
+            string foundIp = "";
+            object ipLock = new object();
+            ManualResetEvent doneEvent = new ManualResetEvent(false);
+            int activeCount = endpoints.Length;
+
+            for (int i = 0; i < endpoints.Length; i++) {
+                string url = endpoints[i];
+                ThreadPool.QueueUserWorkItem((st) => {
+                    try {
+                        HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                        req.Proxy = null;
+                        req.Timeout = timeoutMs;
+                        req.ReadWriteTimeout = timeoutMs;
+                        req.UserAgent = "ClaudeBarrier-Sentinel/6.0.3";
+                        using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                        using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8)) {
+                            string res = sr.ReadToEnd().Trim();
+                            IPAddress parsed;
+                            if (IPAddress.TryParse(res, out parsed) && parsed.AddressFamily == AddressFamily.InterNetwork) {
+                                lock (ipLock) {
+                                    if (string.IsNullOrEmpty(foundIp)) {
+                                        foundIp = res;
+                                        doneEvent.Set();
+                                    }
+                                }
+                            }
+                        }
+                    } catch {}
+                    finally {
+                        if (Interlocked.Decrement(ref activeCount) == 0) {
+                            doneEvent.Set();
+                        }
+                    }
+                });
+            }
+
+            doneEvent.WaitOne(timeoutMs);
+            return foundIp;
         }
 
         private int GetFirewallRuleCountFromRegistry() {
@@ -4555,8 +4639,8 @@ namespace ClaudeBarrier {
                 if (_isSuspended) return;
                 _watchdogTickCount++;
 
-                if (_currentState != ProtectionState.Protected && _cfg.KillSwitchEnabled) {
-                    KillBrowserClaudeSessions();
+                if (_currentState != ProtectionState.Protected && (_cfg.KillSwitchEnabled || _cfg.SentinelGuardEnabled)) {
+                    KillClaudeProcessesInMemory();
                 }
 
                 ThreadPool.QueueUserWorkItem((st) => {
@@ -4576,21 +4660,45 @@ namespace ClaudeBarrier {
                         }
                     } catch {}
 
-                    // 2. KillSwitch при обрыве туннеля, перенаправлении маршрута или обнаружении блокированного региона
+                    // 2. Sentinel Guard: проверка смены интерфейса или обрыва туннеля
+                    bool routeChanged = false;
+                    if (_cfg.SentinelGuardEnabled && _currentState == ProtectionState.Protected && _pinnedAdapterIndex != 0) {
+                        if (bestIfIndex != _pinnedAdapterIndex || !isVpnRoute) {
+                            routeChanged = true;
+                        }
+                    }
+
                     bool isBlocked = IsAnthropicBlockedRegion(CurrentCountry, CurrentIp, "");
-                    if ((!anyVpnUp || !isVpnRoute || isBlocked) && _currentState == ProtectionState.Protected) {
-                        if (_cfg.KillSwitchEnabled) {
-                            KillClaudeProcessesInMemory();
+                    if ((!anyVpnUp || !isVpnRoute || routeChanged || isBlocked) && _currentState == ProtectionState.Protected) {
+                        if (_cfg.KillSwitchEnabled || _cfg.SentinelGuardEnabled) {
+                            KillClaudeImmediately(routeChanged
+                                ? ("10x Sentinel: Маршрут ядра переключился с " + _pinnedAdapterName + " на " + bestAdapterName)
+                                : (!anyVpnUp ? "VPN-туннель разорван" : (isBlocked ? "Выходной IP в неподдерживаемом регионе" : "Маршрут ушел в обход VPN")));
                         }
 
                         SafeInvoke(() => {
-                            string reason = isBlocked
-                                ? ("Выходной IP в РФ / Беларуси (" + CurrentIp + ")!")
-                                : (!anyVpnUp ? "Обрыв VPN: туннель неожиданно отключился!" : ("Маршрут ушел в обход VPN через " + bestAdapterName));
+                            string reason = routeChanged
+                                ? ("10x Sentinel: Маршрут ядра ушел на " + bestAdapterName)
+                                : (isBlocked
+                                    ? ("Выходной IP в РФ / Беларуси (" + CurrentIp + ")!")
+                                    : (!anyVpnUp ? "Обрыв VPN: туннель неожиданно отключился!" : ("Маршрут ушел в обход VPN через " + bestAdapterName)));
                             SetProtectionUIState(ProtectionState.BlockedLeaking, reason);
                         });
                         Log("KILLSWITCH", string.Format("СРОЧНАЯ БЛОКИРОВКА: {0}. Все запущенные процессы Claude немедленно завершены.",
-                            isBlocked ? ("Обнаружен IP в неподдерживаемом регионе (" + CurrentCountry + ")") : (!anyVpnUp ? "VPN-туннель разорван" : ("Маршрут направлен мимо туннеля через " + bestAdapterName))), Color.FromArgb(248, 113, 113));
+                            routeChanged ? ("Смена активного адаптера ядра на " + bestAdapterName) : (isBlocked ? ("Обнаружен IP в неподдерживаемом регионе (" + CurrentCountry + ")") : (!anyVpnUp ? "VPN-туннель разорван" : ("Маршрут направлен мимо туннеля через " + bestAdapterName)))), Color.FromArgb(248, 113, 113));
+                    }
+
+                    // 2.1 Sentinel Guard: Конкурентная проверка соответствия Pinned IP
+                    if (_cfg.SentinelGuardEnabled && _currentState == ProtectionState.Protected && !string.IsNullOrEmpty(_pinnedVpnIp) && (_watchdogTickCount % 4 == 0)) {
+                        string liveIp = ResolvePublicIpConcurrent(2200);
+                        if (!string.IsNullOrEmpty(liveIp) && !string.Equals(liveIp, _pinnedVpnIp, StringComparison.OrdinalIgnoreCase)) {
+                            KillClaudeImmediately("10x Sentinel: Несовпадение с Pinned IP (" + _pinnedVpnIp + " -> " + liveIp + ")");
+                            SafeInvoke(() => {
+                                CurrentIp = liveIp;
+                                SetProtectionUIState(ProtectionState.BlockedLeaking, "Утечка IP: " + liveIp + " (Pinned: " + _pinnedVpnIp + ")");
+                            });
+                            Log("SENTINEL", string.Format("10x SENTINEL ALERT: Обнаружена утечка/смена внешнего IP! Pinned: {0}, Текущий: {1}. Процессы Claude завершены.", _pinnedVpnIp, liveIp), Color.FromArgb(248, 113, 113));
+                        }
                     }
 
                     // 3. Мониторинг IPv6 утечки в реальном времени (Bug 4)
@@ -4764,25 +4872,46 @@ namespace ClaudeBarrier {
             } catch {}
         }
 
-        private void KillClaudeProcessesInMemory() {
+        private void KillClaudeImmediately(string reason) {
             try {
+                int killed = 0;
                 foreach (Process p in Process.GetProcesses()) {
                     try {
                         string name = p.ProcessName.ToLowerInvariant();
+                        bool shouldKill = false;
                         if (name == "claude" || name == "claude-desktop" || name == "claude_desktop" ||
                             name == "claude_dummy" || name.StartsWith("claude-") || name.StartsWith("claude_")) {
+                            shouldKill = true;
+                        } else if (name == "node") {
+                            try {
+                                string title = p.MainWindowTitle.ToLowerInvariant();
+                                if (title.Contains("claude")) shouldKill = true;
+                            } catch {}
+                        }
+
+                        if (shouldKill) {
                             p.Kill();
+                            killed++;
                         }
                     } catch {}
                 }
-                // Принудительно гасим сессии claude.ai в браузерах при активном KillSwitch
-                if (_cfg.KillSwitchEnabled) {
+
+                if (_cfg.KillSwitchEnabled || _cfg.SentinelGuardEnabled) {
                     KillBrowserClaudeSessions();
                 }
 
-                // Принудительно очищаем системный трей от фантомных иконок
                 RefreshSystemTray();
+
+                if (killed > 0) {
+                    SafeInvoke(() => {
+                        Log("SENTINEL", string.Format("10x SENTINEL: Выгружено {0} процессов Claude из памяти (<15 мс). Причина: {1}", killed, reason), Color.FromArgb(248, 113, 113));
+                    });
+                }
             } catch {}
+        }
+
+        private void KillClaudeProcessesInMemory() {
+            KillClaudeImmediately("Превентивное завершение процессов сторожевой службой");
         }
 
         private void RunEmergencyInterceptTest() {

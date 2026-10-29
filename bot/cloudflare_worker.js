@@ -44,7 +44,7 @@ async function handleUpdate(update, env) {
   // 1. /start
   if (text === "/start" || text === "◀️ Назад в главное меню") {
     const welcome = `🛡 <b>Добро пожаловать в официальный сервис ClaudeBarrier!</b>\n\n` +
-      `<b>ClaudeBarrier</b> — защитный сетевой экран и сторож ядра Windows Filtering Platform (WFP), предотвращающий баны учетных записей <b>Anthropic Claude</b> по геолокации.\n\n` +
+      `<b>ClaudeBarrier</b> — защитный сетевой экран ядра Windows Filtering Platform (WFP) и служба Sentinel Guard, предотвращающие баны учетных записей <b>Anthropic Claude</b> по утечкам IP и геолокации.\n\n` +
       `🔑 <i>Получите персональный лицензионный ключ на 3 дня с криптографической подписью ядра прямо в этом боте.</i>\n\n` +
       `Выберите нужное действие в меню ниже:`;
     await sendMessage(chatId, welcome, getMainKeyboard());
@@ -70,14 +70,12 @@ async function handleUpdate(update, env) {
 
   // 3. 📥 Скачать ClaudeBarrier
   if (text === "📥 Скачать ClaudeBarrier" || text === "/download") {
-    const dlMsg = `📥 <b>Официальные сборки ClaudeBarrier (релиз v6.0.3):</b>\n\n` +
+    const dlMsg = `📥 <b>Официальные пакеты ClaudeBarrier (релиз v6.0.3):</b>\n\n` +
       `Выберите формат загрузки:\n\n` +
       `💻 <b>Windows Установщик (x64):</b>\n` +
       `Автоматическая установка в Program Files, ярлыки, фоновый автозапуск в трее и деинсталлятор.\n\n` +
       `📦 <b>Windows Portable (x64):</b>\n` +
-      `Портативная версия в ZIP-архиве без установки — распакуйте и запускайте.\n\n` +
-      `📱 <b>Android Sentinel App (.apk):</b>\n` +
-      `Мобильный фоновый сторож для защиты трафика Claude на смартфонах.\n\n` +
+      `Портативная версия в ZIP-архиве без установки — распакуйте и запускайте из любой папки.\n\n` +
       `🌐 <b>GitHub:</b> Открытый исходный код и история релизов.`;
     await sendMessage(chatId, dlMsg, getDownloadKeyboard());
     return;
@@ -94,11 +92,6 @@ async function handleUpdate(update, env) {
     await sendMessage(chatId, `📦 <b>Windows Portable ClaudeBarrier v6.0.3:</b>\n\n<a href="${url}">👉 Нажмите здесь для скачивания ClaudeBarrier-Windows-Portable-x64.zip</a>`, getDownloadKeyboard());
     return;
   }
-  if (text === "📱 Android App (.apk)") {
-    const url = "https://github.com/skizewike/claude-antiban/releases/download/v6.0.3/ClaudeBarrier-Android.apk";
-    await sendMessage(chatId, `📱 <b>Android Sentinel Guard ClaudeBarrier v6.0.3:</b>\n\n<a href="${url}">👉 Нажмите здесь для скачивания ClaudeBarrier-Android.apk</a>`, getDownloadKeyboard());
-    return;
-  }
   if (text === "🌐 GitHub Releases") {
     const url = "https://github.com/skizewike/claude-antiban/releases/latest";
     await sendMessage(chatId, `🌐 <b>Репозиторий и релизы проекта:</b>\n\n<a href="${url}">https://github.com/skizewike/claude-antiban/releases</a>`, getDownloadKeyboard());
@@ -107,11 +100,11 @@ async function handleUpdate(update, env) {
 
   // 4. 🛡 О защите
   if (text === "🛡 О защите" || text === "/about") {
-    const aboutMsg = `🛡 <b>Архитектура безопасности ClaudeBarrier:</b>\n\n` +
-      `• <b>WFP Брандмауэр ядра:</b> Аппаратная блокировка пакетов к 160.79.104.0/23 и 2607:6bc0::/32 на физических сетевых картах.\n` +
-      `• <b>Маршрутизация 0.0.0.0/0:</b> Проверка через Win32 API GetBestInterface, что шлюз к Anthropic действительно лежит через VPN-интерфейс.\n` +
-      `• <b>Защита при переходе в спящий режим:</b> Мгновенное завершение Claude.exe при Suspend и блокировка до восстановления туннеля.\n` +
-      `• <b>Аварийный KillSwitch:</b> Мониторинг разрыва VPN соединения и превентивный сброс сокетов за <15 мс.\n` +
+    const aboutMsg = `🛡 <b>Архитектура безопасности ClaudeBarrier (Sentinel Guard + WFP):</b>\n\n` +
+      `• <b>Sentinel Guard (Fail-Closed Watchdog):</b> Превентивная служба завершения процессов Claude.exe за <15 мс при отклонении IP или разрыве VPN.\n` +
+      `• <b>WFP Брандмауэр ядра (0 мс):</b> Аппаратная блокировка пакетов к 160.79.104.0/23 на физических сетевых интерфейсах.\n` +
+      `• <b>Маршрутизация 0.0.0.0/0:</b> Проверка через Win32 API GetBestInterface, что шлюз к Anthropic направлен исключительно в туннель.\n` +
+      `• <b>Защита спящего режима:</b> Мгновенное завершение Claude перед сном и блокировка до подтверждения туннеля при пробуждении.\n` +
       `• <b>Zapret DPI Bypass:</b> Встроенный модуль обхода замедлений и фильтров провайдеров.\n` +
       `• <b>DNS Leak Guard:</b> Авто-отключение Smart Multi-Homed Name Resolution в ядре Windows.`;
     await sendMessage(chatId, aboutMsg, getMainKeyboard());
@@ -191,7 +184,7 @@ function getDownloadKeyboard() {
   return {
     keyboard: [
       [{ text: "💻 Windows Установщик (.exe)" }],
-      [{ text: "📦 Windows Portable (.zip)" }, { text: "📱 Android App (.apk)" }],
+      [{ text: "📦 Windows Portable (.zip)" }],
       [{ text: "🌐 GitHub Releases" }],
       [{ text: "◀️ Назад в главное меню" }]
     ],
