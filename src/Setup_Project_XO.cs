@@ -296,7 +296,7 @@ namespace ClaudeBarrier.Installer {
             pnlTitle.Controls.Add(lblHeadTitle);
 
             Label lblHeadSub = new Label() {
-                Text = "Мастер установки автономного ядра безопасности // Релиз v6.0.2",
+                Text = "Мастер установки автономного ядра безопасности // Релиз v6.0.5",
                 Font = new Font("Segoe UI", 7.8f),
                 ForeColor = Color.FromArgb(148, 163, 184),
                 Location = new Point(49, 27),
@@ -615,7 +615,7 @@ namespace ClaudeBarrier.Installer {
                 using (RegistryKey rk = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeBarrier")) {
                     if (rk != null) {
                         rk.SetValue("DisplayName", "ClaudeBarrier");
-                        rk.SetValue("DisplayVersion", "6.0.3");
+                        rk.SetValue("DisplayVersion", "6.0.5");
                         rk.SetValue("Publisher", "ClaudeBarrier Security Team");
                         rk.SetValue("DisplayIcon", mainExe + ",0");
                         rk.SetValue("UninstallString", "\"" + uninstallerExe + "\"");

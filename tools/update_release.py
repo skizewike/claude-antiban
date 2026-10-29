@@ -11,18 +11,22 @@ res = subprocess.run([git_exe, 'credential', 'fill'], input=inp, capture_output=
 token = [l[9:].strip() for l in res.stdout.splitlines() if l.startswith('password=')][0]
 
 repo = 'skizewike/claude-antiban'
-tag = 'v6.0.4'
+tag = 'v6.0.5'
 
 # 1. Prepare Release description
-release_title = "ClaudeBarrier v6.0.4"
-release_body = r"""# ClaudeBarrier v6.0.4 — Official Release
+release_title = "ClaudeBarrier v6.0.5"
+release_body = r"""# ClaudeBarrier v6.0.5 — Official Release
 
 **Официальный бот активации и поддержки:** [@ClaudeBarrierBot](https://t.me/ClaudeBarrierBot)  
 **Репозиторий:** [skizewike/claude-antiban](https://github.com/skizewike/claude-antiban)
 
 ---
 
-### Что нового в версии 6.0.4
+### Что нового в версии 6.0.5
+* **Тихий сторожевой дозор (Zero-Spam Watchdog):** Устранено ложное срабатывание фонового таймера при отключенном VPN. При отсутствии открытых процессов Claude барьер работает абсолютно бесшумно — никаких всплывающих уведомлений в трее и флуда в консоли ядра.
+* **Защита от наложения окон (Modal Dialog Guard):** Предотвращено одновременное открытие нескольких модальных диалогов WFP-тестов на экране; обеспечена корректная привязка к родительскому окну.
+* **Распознавание туннелей AmneziaVPN / WireGuard в тестах WFP:** Успешный TCP SYN через активный VPN-интерфейс распознается как защищенное соединение, а не ошибочная утечка.
+* **Кулдаун системных уведомлений (Notification Rate-Limiting):** Ограничение частоты показа BalloonTip в системном трее Windows.
 * **Win32 Kernel Hook NotifyAddrChange (iphlpapi.dll):** Мгновенная реакция за 0–5 мс на любые изменения таблицы сетевой маршрутизации ядра Windows. Устранена любая задержка таймеров.
 * **Многосигнальная триангуляция (Multi-Signal Triangulation):** Мониторинг 3 независимых векторов (Процесс VPN, Маршрут ядра `0.0.0.0/0` через виртуальный адаптер Wintun/WireGuard, Закрепленный IP с конкурентным опросом резолверов). Правило 2 из 3; мгновенный аппаратный сброс при падении маршрута.
 * **Двухэтапный Process Killer:** Корректное закрытие всех окон Claude через `WM_CLOSE` -> пауза 150 мс -> принудительное снятие выживших проверенных PID (`Process.Kill(entireProcessTree: true)`).
@@ -37,8 +41,8 @@ release_body = r"""# ClaudeBarrier v6.0.4 — Official Release
 
 | Платформа (OS) | Пакет загрузки | Описание |
 | :--- | :--- | :--- |
-| **Windows x64** | [**ClaudeBarrier-Setup-x64.exe**](https://github.com/skizewike/claude-antiban/releases/download/v6.0.4/ClaudeBarrier-Setup-x64.exe) | Полный инсталлятор с автоматической регистрацией и треем |
-| **Windows Portable** | [**ClaudeBarrier-Windows-Portable-x64.zip**](https://github.com/skizewike/claude-antiban/releases/download/v6.0.4/ClaudeBarrier-Windows-Portable-x64.zip) | Портативная версия без инсталляции в систему |
+| **Windows x64** | [**ClaudeBarrier-Setup-x64.exe**](https://github.com/skizewike/claude-antiban/releases/download/v6.0.5/ClaudeBarrier-Setup-x64.exe) | Полный инсталлятор с автоматической регистрацией и треем |
+| **Windows Portable** | [**ClaudeBarrier-Windows-Portable-x64.zip**](https://github.com/skizewike/claude-antiban/releases/download/v6.0.5/ClaudeBarrier-Windows-Portable-x64.zip) | Портативная версия без инсталляции в систему |
 
 ---
 

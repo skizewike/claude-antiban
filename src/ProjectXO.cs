@@ -1480,6 +1480,8 @@ namespace ClaudeBarrier {
         private volatile bool _isTerminating = false;
         private bool _isServiceIpcConnected = false;
         private System.Threading.Timer _serviceHeartbeatTimer = null;
+        private DateTime _lastKillBalloonTime = DateTime.MinValue;
+        private static int _isShowingModalDialog = 0;
 
         public int CurrentPing = 0;
         public string CurrentIp = "...";
@@ -2438,7 +2440,7 @@ namespace ClaudeBarrier {
 
             // Нижний футер 1 в 1 как в Cloudflare One Client
             Label lblCopy = new Label() {
-                Text = "v6.0.3 | ClaudeBarrier Traffic Sentinel",
+                Text = "v6.0.5 | ClaudeBarrier Traffic Sentinel",
                 Font = new Font("Segoe UI", 8.2f),
                 ForeColor = Color.FromArgb(80, 95, 120),
                 Location = new Point(0, 642),
@@ -3745,11 +3747,11 @@ namespace ClaudeBarrier {
                     ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288 | SecurityProtocolType.Tls12;
                     HttpWebRequest req = (HttpWebRequest)WebRequest.Create("https://github.com/skizewike/claude-antiban/releases/latest");
                     req.Method = "HEAD";
-                    req.UserAgent = "ClaudeBarrier-Client/6.0.3";
+                    req.UserAgent = "ClaudeBarrier-Client/6.0.5";
                     req.Timeout = 6000;
                     req.AllowAutoRedirect = false;
 
-                    string latestTag = "v6.0.3";
+                    string latestTag = "v6.0.5";
                     string loc = "";
                     using (HttpWebResponse res = (HttpWebResponse)req.GetResponse()) {
                         loc = res.GetResponseHeader("Location");
@@ -3766,7 +3768,7 @@ namespace ClaudeBarrier {
                     }
                     SafeInvoke(() => {
                         _latestReleaseUrl = string.IsNullOrEmpty(loc) ? "https://github.com/skizewike/claude-antiban/releases/latest" : loc;
-                        string curVer = "v6.0.3";
+                        string curVer = "v6.0.5";
                         bool isNewer = CompareVersions(latestTag, curVer) > 0;
 
                         if (isNewer) {
@@ -4227,7 +4229,7 @@ namespace ClaudeBarrier {
                     req.Proxy = null;
                     req.Accept = "application/dns-json";
                     req.Timeout = 2500;
-                    req.UserAgent = "ClaudeBarrier-DoH/6.0.3";
+                    req.UserAgent = "ClaudeBarrier-DoH/6.0.5";
 
                     using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) {
                         sw.Stop();
@@ -4459,7 +4461,7 @@ namespace ClaudeBarrier {
                                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                                 req.Proxy = null;
                                 req.Timeout = 3200;
-                                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/6.0.3";
+                                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/6.0.5";
                                 using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
                                 using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8)) {
                                     string json = sr.ReadToEnd();
@@ -4540,7 +4542,7 @@ namespace ClaudeBarrier {
                                     reqApi.Proxy = null;
                                     reqApi.Timeout = 2500;
                                     reqApi.Method = "HEAD";
-                                    reqApi.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/6.0.3";
+                                    reqApi.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClaudeBarrier/6.0.5";
                                     using (HttpWebResponse respApi = (HttpWebResponse)reqApi.GetResponse()) {
                                         pingMs = (int)sw.ElapsedMilliseconds;
                                     }
@@ -4742,7 +4744,7 @@ namespace ClaudeBarrier {
                         req.Proxy = null;
                         req.Timeout = timeoutMs;
                         req.ReadWriteTimeout = timeoutMs;
-                        req.UserAgent = "ClaudeBarrier-Sentinel/6.0.3";
+                        req.UserAgent = "ClaudeBarrier-Sentinel/6.0.5";
                         using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
                         using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8)) {
                             string res = sr.ReadToEnd().Trim();
@@ -4834,7 +4836,7 @@ namespace ClaudeBarrier {
 
                     if ((eval.TriggerKill || isBlocked) && _currentState == ProtectionState.Protected) {
                         if (_cfg.KillSwitchEnabled || _cfg.SentinelGuardEnabled) {
-                            KillClaudeImmediately(isBlocked ? "Выходной IP в неподдерживаемом регионе" : eval.Reason);
+                            KillClaudeImmediately(isBlocked ? "Выходной IP в неподдерживаемом регионе" : eval.Reason, forceNotify: true);
                         }
 
                         SafeInvoke(() => {
@@ -4851,7 +4853,7 @@ namespace ClaudeBarrier {
                     if (_cfg.SentinelGuardEnabled && _currentState == ProtectionState.Protected && !string.IsNullOrEmpty(_pinnedVpnIp) && (_watchdogTickCount % 4 == 0)) {
                         string liveIp = ResolvePublicIpConcurrent(2200);
                         if (!string.IsNullOrEmpty(liveIp) && !string.Equals(liveIp, _pinnedVpnIp, StringComparison.OrdinalIgnoreCase)) {
-                            KillClaudeImmediately("10x Sentinel: Несовпадение с Pinned IP (" + _pinnedVpnIp + " -> " + liveIp + ")");
+                            KillClaudeImmediately("10x Sentinel: Несовпадение с Pinned IP (" + _pinnedVpnIp + " -> " + liveIp + ")", forceNotify: true);
                             SafeInvoke(() => {
                                 CurrentIp = liveIp;
                                 SetProtectionUIState(ProtectionState.BlockedLeaking, "Утечка IP: " + liveIp + " (Pinned: " + _pinnedVpnIp + ")");
@@ -4959,8 +4961,9 @@ namespace ClaudeBarrier {
             return false;
         }
 
-        private void KillBrowserClaudeSessions() {
-            if (!_cfg.KillSwitchEnabled) return;
+        private int KillBrowserClaudeSessions() {
+            if (!_cfg.KillSwitchEnabled) return 0;
+            int closedCount = 0;
             try {
                 uint currentPid = (uint)Process.GetCurrentProcess().Id;
                 List<IntPtr> windowsToClose = new List<IntPtr>();
@@ -5022,6 +5025,7 @@ namespace ClaudeBarrier {
                 }
 
                 if (closedDetails.Count > 0) {
+                    closedCount = closedDetails.Count;
                     SafeInvoke(() => {
                         foreach (string det in closedDetails) {
                             Log("KILLSWITCH", "ОБНАРУЖЕНА СЕССИЯ В БРАУЗЕРЕ: Окно " + det + " закрыто во избежание утечки сессии.", Color.FromArgb(248, 113, 113));
@@ -5029,6 +5033,7 @@ namespace ClaudeBarrier {
                     });
                 }
             } catch {}
+            return closedCount;
         }
 
         // ================= NEXT-GEN SENTINEL & KERNEL ENGINE =================
@@ -5064,7 +5069,7 @@ namespace ClaudeBarrier {
                 if (_pinnedAdapterIndex != 0 && bestIfIndex != _pinnedAdapterIndex) routeFlipped = true;
 
                 if (routeFlipped) {
-                    KillClaudeImmediately("Хук ядра NotifyAddrChange (<5 мс): маршрут 0.0.0.0/0 ушел на " + bestAdapterName);
+                    KillClaudeImmediately("Хук ядра NotifyAddrChange (<5 мс): маршрут 0.0.0.0/0 ушел на " + bestAdapterName, forceNotify: true);
                     SafeInvoke(() => {
                         SetProtectionUIState(ProtectionState.BlockedLeaking, "Утечка маршрута: " + bestAdapterName);
                     });
@@ -5257,7 +5262,8 @@ namespace ClaudeBarrier {
         }
 
         // 6. Two-Stage Process Killer (Graceful WM_CLOSE -> Force Kill Verified PIDs)
-        public static void ExecuteTwoStageKill(string reason) {
+        public static int ExecuteTwoStageKill(string reason) {
+            int killedCount = 0;
             try {
                 List<int> targetPids = new List<int>();
                 foreach (Process p in Process.GetProcesses()) {
@@ -5302,35 +5308,53 @@ namespace ClaudeBarrier {
                             using (Process p = Process.GetProcessById(pid)) {
                                 string name = p.ProcessName.ToLowerInvariant();
                                 if (name == "claude" || name == "claude-desktop" || name == "claude_desktop" ||
-                                    name.StartsWith("claude-") || name == "node") {
+                                    name == "claude_dummy" || name.StartsWith("claude-") || name.StartsWith("claude_") || name == "node") {
                                     p.Kill();
+                                    killedCount++;
                                 }
                             }
                         } catch {}
                     }
                 }
             } catch {}
+            return killedCount;
         }
 
-        private void KillClaudeImmediately(string reason) {
-            ExecuteTwoStageKill(reason);
-
+        private int KillClaudeImmediately(string reason, bool forceNotify = false) {
+            int pidsKilled = ExecuteTwoStageKill(reason);
+            int browserClosed = 0;
             if (_cfg.KillSwitchEnabled || _cfg.SentinelGuardEnabled) {
-                KillBrowserClaudeSessions();
+                browserClosed = KillBrowserClaudeSessions();
             }
 
-            RefreshSystemTray();
+            int totalKilled = pidsKilled + browserClosed;
 
-            SafeInvoke(() => {
-                Log("SENTINEL", string.Format("SENTINEL GUARD (<5 мс): {0}", reason), Color.FromArgb(248, 113, 113));
-                if (_trayIcon != null) {
-                    _trayIcon.ShowBalloonTip(3000, "ClaudeBarrier Sentinel", "Процессы Claude превентивно завершены: " + reason, ToolTipIcon.Warning);
-                }
-            });
+            // Only log and notify if actual processes/windows were terminated, OR forceNotify is explicitly true
+            if (totalKilled > 0 || forceNotify) {
+                RefreshSystemTray();
+
+                DateTime now = DateTime.UtcNow;
+                bool canShowBalloon = (now - _lastKillBalloonTime).TotalSeconds >= 6.0;
+
+                SafeInvoke(() => {
+                    string detail = totalKilled > 0
+                        ? string.Format("Завершено процессов/окон Claude: {0} ({1})", totalKilled, reason)
+                        : string.Format("Срабатывание защиты: {0} (активных процессов Claude не обнаружено)", reason);
+
+                    Log("SENTINEL", string.Format("SENTINEL GUARD: {0}", detail), Color.FromArgb(248, 113, 113));
+
+                    if (_trayIcon != null && canShowBalloon) {
+                        _lastKillBalloonTime = now;
+                        _trayIcon.ShowBalloonTip(3000, "ClaudeBarrier Sentinel", detail, ToolTipIcon.Warning);
+                    }
+                });
+            }
+
+            return totalKilled;
         }
 
-        private void KillClaudeProcessesInMemory() {
-            KillClaudeImmediately("Превентивное завершение процессов сторожевой службой");
+        private int KillClaudeProcessesInMemory() {
+            return KillClaudeImmediately("Превентивное завершение процессов сторожевой службой", forceNotify: false);
         }
 
         private void RunEmergencyInterceptTest() {
@@ -5338,6 +5362,7 @@ namespace ClaudeBarrier {
             ThreadPool.QueueUserWorkItem((st) => {
                 Stopwatch sw = Stopwatch.StartNew();
                 bool blockedByKernel = false;
+                bool isConnected = false;
                 int errorCode = 0;
                 string errorMsg = "";
                 long elapsedMs = 0;
@@ -5356,6 +5381,7 @@ namespace ClaudeBarrier {
                             sw.Stop();
                             elapsedMs = sw.ElapsedMilliseconds;
                             blockedByKernel = false;
+                            isConnected = true;
                         } else {
                             sock.Close();
                             sw.Stop();
@@ -5382,49 +5408,75 @@ namespace ClaudeBarrier {
                     errorMsg = ex.Message;
                 }
 
+                string bestAdapterName, bestDesc;
+                bool isVpnRoute;
+                uint bestIfIndex;
+                CheckAnthropicRouting(out bestAdapterName, out bestDesc, out isVpnRoute, out bestIfIndex);
+
                 int fwCount = GetFirewallRuleCountFromRegistry();
                 bool isProtected = (_currentState == ProtectionState.Protected);
 
                 SafeInvoke(() => {
-                    if (blockedByKernel || (fwCount > 0 && errorCode == 10013)) {
-                        Log("WFP-TEST", string.Format("Пакет к 160.79.104.10:443 успешно сброшен фильтром WFP за {0} мс (WSA: {1}).", elapsedMs, errorCode), Color.FromArgb(52, 211, 153));
-                        MessageBox.Show(
-                            "Результат теста аварийного перехвата WFP:\n\n" +
-                            "• Статус ядра: ПЕРЕХВАТ АКТИВЕН (Аппаратный сброс SYN)\n" +
-                            "• Время отклика WFP: " + elapsedMs + " мс (мгновенный отсев ядра)\n" +
-                            "• Код сетевого перехвата ОС: " + errorCode + " (" + (errorCode == 10013 ? "WSAEACCES — Заблокировано WFP" : "WSAEHOSTUNREACH") + ")\n" +
-                            "• Зарегистрировано правил изоляции: " + fwCount + " шт.\n" +
-                            "• Целевой узел: 160.79.104.10:443 (Anthropic Direct CIDR)\n\n" +
-                            "Прямая утечка трафика на незащищенные сетевые интерфейсы исключена.",
-                            "Аварийный тест WFP — Успешно",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information);
-                    } else if (isProtected && CurrentPing > 0) {
-                        Log("WFP-TEST", string.Format("Трафик направлен через туннель (RTT: {0} мс). Прямой утечки нет.", elapsedMs), Color.FromArgb(52, 211, 153));
-                        MessageBox.Show(
-                            "Результат проверки безопасности соединения:\n\n" +
-                            "• Статус туннеля: ЗАЩИЩЕН (Трафик внутри VPN)\n" +
-                            "• Задержка отклика (RTT): " + elapsedMs + " мс\n" +
-                            "• Внешний адрес шлюза: " + CurrentIp + " (" + CurrentCountry + ")\n" +
-                            "• Активных правил изоляции в реестре: " + fwCount + " шт.\n\n" +
-                            "Шлюз Anthropic доступен исключительно через защищенный VPN-адаптер.",
-                            "Тест соединения",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information);
-                    } else {
-                        Log("WFP-TEST", string.Format("Внимание: сокет вернул код {0} ({1}). Правил WFP: {2}.", errorCode, errorMsg, fwCount), Color.FromArgb(248, 113, 113));
-                        MessageBox.Show(
-                            "Результат теста безопасности:\n\n" +
-                            "• Статус: Прямое соединение к Anthropic не перехвачено ядром!\n" +
-                            "• Время замера: " + elapsedMs + " мс\n" +
-                            "• Ответ сокета: " + (errorCode > 0 ? ("Код " + errorCode + " (" + errorMsg + ")") : (string.IsNullOrEmpty(errorMsg) ? "Соединение установлено без фильтрации" : errorMsg)) + "\n" +
-                            "• Внедрено правил WFP в систему: " + fwCount + " шт.\n\n" +
-                            (fwCount == 0
-                                ? "Рекомендация: нажмите «Применить правила» в строке WFP для активации фильтрации."
-                                : "Рекомендация: включите VPN перед запуском приложений Claude."),
-                            "Тест перехвата WFP — Внимание",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Warning);
+                    if (Interlocked.CompareExchange(ref _isShowingModalDialog, 1, 0) != 0) return;
+                    try {
+                        if (blockedByKernel || (fwCount > 0 && errorCode == 10013)) {
+                            Log("WFP-TEST", string.Format("Пакет к 160.79.104.10:443 успешно сброшен фильтром WFP за {0} мс (WSA: {1}).", elapsedMs, errorCode), Color.FromArgb(52, 211, 153));
+                            MessageBox.Show(
+                                this,
+                                "Результат теста аварийного перехвата WFP:\n\n" +
+                                "• Статус ядра: ПЕРЕХВАТ АКТИВЕН (Аппаратный сброс SYN)\n" +
+                                "• Время отклика WFP: " + elapsedMs + " мс (мгновенный отсев ядра)\n" +
+                                "• Код сетевого перехвата ОС: " + errorCode + " (" + (errorCode == 10013 ? "WSAEACCES — Заблокировано WFP" : "WSAEHOSTUNREACH") + ")\n" +
+                                "• Зарегистрировано правил изоляции: " + fwCount + " шт.\n" +
+                                "• Целевой узел: 160.79.104.10:443 (Anthropic Direct CIDR)\n\n" +
+                                "Прямая утечка трафика на незащищенные сетевые интерфейсы исключена.",
+                                "Аварийный тест WFP — Успешно",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information);
+                        } else if (isVpnRoute && isConnected) {
+                            Log("WFP-TEST", string.Format("Трафик направлен через туннель {0} (RTT: {1} мс). Прямой утечки нет.", bestAdapterName, elapsedMs), Color.FromArgb(52, 211, 153));
+                            MessageBox.Show(
+                                this,
+                                "Результат проверки безопасности соединения:\n\n" +
+                                "• Статус туннеля: ЗАЩИЩЕН (Трафик внутри VPN " + bestAdapterName + ")\n" +
+                                "• Задержка отклика (RTT): " + elapsedMs + " мс\n" +
+                                "• Внешний адрес: " + CurrentIp + " (" + CurrentCountry + ")\n" +
+                                "• Активных правил изоляции в ядре: " + fwCount + " шт.\n\n" +
+                                "Соединение к Anthropic проходит исключительно через виртуальный туннель VPN.",
+                                "Тест соединения WFP — Безопасно",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information);
+                        } else if (!isVpnRoute && isConnected) {
+                            Log("WFP-TEST", string.Format("Внимание: пакет прошел через физический интерфейс {0} без VPN! Правил WFP: {1}.", bestAdapterName, fwCount), Color.FromArgb(248, 113, 113));
+                            MessageBox.Show(
+                                this,
+                                "Результат теста безопасности:\n\n" +
+                                "• Внимание: Трафик к Anthropic пошел через физический интерфейс " + bestAdapterName + " без защиты VPN!\n" +
+                                "• Время отклика: " + elapsedMs + " мс\n" +
+                                "• Ответ сокета: Соединение установлено в обход туннеля\n" +
+                                "• Внедрено правил WFP в систему: " + fwCount + " шт.\n\n" +
+                                (fwCount == 0
+                                    ? "Рекомендация: нажмите «Применить правила» в строке WFP для активации фильтрации."
+                                    : "Рекомендация: включите VPN перед запуском приложений Claude."),
+                                "Тест перехвата WFP — Внимание",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning);
+                        } else {
+                            Log("WFP-TEST", string.Format("Прямое соединение без VPN заблокировано/таймаут ({0} мс, код: {1}). Правил WFP: {2}.", elapsedMs, errorCode, fwCount), Color.FromArgb(52, 211, 153));
+                            MessageBox.Show(
+                                this,
+                                "Результат теста безопасности:\n\n" +
+                                "• Статус: Прямое нешифрованное соединение заблокировано или недоступно\n" +
+                                "• Время замера: " + elapsedMs + " мс\n" +
+                                "• Ответ сокета: " + (errorCode > 0 ? ("Код " + errorCode + " (" + errorMsg + ")") : errorMsg) + "\n" +
+                                "• Внедрено правил WFP в ядро: " + fwCount + " шт.\n\n" +
+                                "Прямой доступ к серверам Anthropic без VPN не проходит.",
+                                "Тест перехвата WFP",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information);
+                        }
+                    } finally {
+                        Interlocked.Exchange(ref _isShowingModalDialog, 0);
                     }
                 });
             });
@@ -5537,16 +5589,23 @@ namespace ClaudeBarrier {
                         Log("WFP", string.Format("Правила WFP успешно применены ({0} правил в реестре). Сеть защищена от утечек.", count), Color.FromArgb(52, 211, 153));
                         StartAudit();
                         if (showSuccessDialog) {
-                            MessageBox.Show(
-                                "Правила аппаратной изоляции WFP успешно применены!\n\n" +
-                                "• Внедрено уникальных правил в ядро: " + count + " шт.\n" +
-                                "• Заблокирован прямой доступ к 160.79.104.0/23.\n" +
-                                "• Изолированы физические сетевые адаптеры.\n" +
-                                "• Отключены утечки IPv6 и Smart DNS.\n\n" +
-                                "Трафик Claude физически изолирован внутри туннеля.",
-                                "WFP Брандмауэр ядра — Успешно",
-                                MessageBoxButtons.OK,
-                                MessageBoxIcon.Information);
+                            if (Interlocked.CompareExchange(ref _isShowingModalDialog, 1, 0) == 0) {
+                                try {
+                                    MessageBox.Show(
+                                        this,
+                                        "Правила аппаратной изоляции WFP успешно применены!\n\n" +
+                                        "• Внедрено уникальных правил в ядро: " + count + " шт.\n" +
+                                        "• Заблокирован прямой доступ к 160.79.104.0/23.\n" +
+                                        "• Изолированы физические сетевые адаптеры.\n" +
+                                        "• Отключены утечки IPv6 и Smart DNS.\n\n" +
+                                        "Трафик Claude физически изолирован внутри туннеля.",
+                                        "WFP Брандмауэр ядра — Успешно",
+                                        MessageBoxButtons.OK,
+                                        MessageBoxIcon.Information);
+                                } finally {
+                                    Interlocked.Exchange(ref _isShowingModalDialog, 0);
+                                }
+                            }
                         }
                     });
                 } catch (Exception ex) {
@@ -5696,10 +5755,13 @@ namespace ClaudeBarrier {
                 try {
                     int ret = MainWindow.NotifyAddrChange(IntPtr.Zero, IntPtr.Zero);
                     if (ret == 0 && !_isStopping) {
+                        string bestAdapterName, bestDesc;
+                        bool isVpnRoute;
                         uint ifIndex;
-                        uint anthropicAddr = MainWindow.IpToUint("160.79.104.10");
-                        if (MainWindow.GetBestInterface(anthropicAddr, out ifIndex) == 0) {
-                            MainWindow.ExecuteTwoStageKill("Служба ядра NotifyAddrChange: Маршрут Anthropic направлен на физический интерфейс");
+                        if (MainWindow.CheckAnthropicRouting(out bestAdapterName, out bestDesc, out isVpnRoute, out ifIndex)) {
+                            if (!isVpnRoute) {
+                                MainWindow.ExecuteTwoStageKill("Служба ядра NotifyAddrChange: Маршрут Anthropic направлен на физический интерфейс " + bestAdapterName);
+                            }
                         }
                     }
                 } catch {

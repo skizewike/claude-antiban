@@ -10,7 +10,7 @@
 **Аппаратный экран ядра Windows (WFP), Win32 Route Hook и Hybrid Sentinel Service для Anthropic Claude**
 
 <p align="center">
-  <a href="https://github.com/skizewike/claude-antiban/releases/latest"><img src="https://img.shields.io/badge/release-v6.0.4-0078D4?style=for-the-badge&logo=github&logoColor=white" alt="Release" /></a>
+  <a href="https://github.com/skizewike/claude-antiban/releases/latest"><img src="https://img.shields.io/badge/release-v6.0.5-0078D4?style=for-the-badge&logo=github&logoColor=white" alt="Release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22c55e?style=for-the-badge" alt="License" /></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011%20(x64)-0078D4?style=for-the-badge&logo=windows" alt="Platforms" />
   <a href="https://t.me/ClaudeBarrierBot"><img src="https://img.shields.io/badge/Telegram_Bot-@ClaudeBarrierBot-229ED9?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Bot" /></a>
@@ -94,8 +94,8 @@ ClaudeBarrier защищает сессию по многоуровневой с
 
 | Платформа (OS) | Пакеты загрузки (Download) | Описание |
 | :--- | :--- | :--- |
-| **Windows x64** <br> `Windows 10 / 11` | [![OfficialSetup x64](https://img.shields.io/badge/OfficialSetup-x64-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.4/ClaudeBarrier-Setup-x64.exe) | Полный инсталлятор с автоматической установкой в систему, службой ядра и треем |
-| **Windows Portable** <br> `Windows 10 / 11` | [![Portable x64](https://img.shields.io/badge/Portable-x64-334155?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.4/ClaudeBarrier-Windows-Portable-x64.zip) | Автономная версия без инсталляции (запуск из любой папки) |
+| **Windows x64** <br> `Windows 10 / 11` | [![OfficialSetup x64](https://img.shields.io/badge/OfficialSetup-x64-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.5/ClaudeBarrier-Setup-x64.exe) | Полный инсталлятор с автоматической установкой в систему, службой ядра и треем |
+| **Windows Portable** <br> `Windows 10 / 11` | [![Portable x64](https://img.shields.io/badge/Portable-x64-334155?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.5/ClaudeBarrier-Windows-Portable-x64.zip) | Автономная версия без инсталляции (запуск из любой папки) |
 
 ---
 
@@ -108,8 +108,12 @@ ClaudeBarrier защищает сессию по многоуровневой с
 
 ---
 
-## 🚀 Ключевые возможности версии 6.0.4
+## 🚀 Ключевые возможности версии 6.0.5
 
+* **Тихий сторожевой дозор (Zero-Spam Watchdog):** Фоновый таймер больше не спамит в лог и не шлет уведомлений при отсутствии запущенных процессов Claude. 0% ложных срабатываний при отключенном VPN.
+* **Защита от наложения модальных окон (Modal Guard):** Исключено одновременное появление нескольких диалоговых окон сокет-тестов на экране; добавлена привязка к родительскому дескриптору окна.
+* **Распознавание VPN-туннелей в тестах WFP:** Успешный TCP SYN через AmneziaVPN / WireGuard теперь корректно определяется как защищенный туннель, а не утечка.
+* **Кулдаун системных уведомлений BalloonTip:** Ограничение частоты всплывающих оповещений Windows для комфортной работы.
 * **Win32 Hook NotifyAddrChange:** Аппаратная реакция за 0–5 мс на любые изменения таблицы маршрутизации Windows.
 * **Многосигнальная триангуляция:** Мониторинг процесса VPN, интерфейса туннеля и Pinned IP по правилу 2 из 3 с мгновенным fail-closed при сбросе маршрута.
 * **Двухэтапный Process Killer:** `WM_CLOSE` всем окнам -> 150 мс grace period -> принудительное завершение проверенных процессов `Claude.exe`, `claude-desktop.exe`, `claude.exe` (CLI) и `node.exe`.

@@ -4,7 +4,7 @@ chcp 65001 >nul
 cd /d "%~dp0"
 title ClaudeBarrier Build Pipeline
 echo ================================================================
-echo             CLAUDEBARRIER BUILD PIPELINE v6.0.4
+echo             CLAUDEBARRIER BUILD PIPELINE v6.0.5
 echo ================================================================
 echo.
 
@@ -61,5 +61,5 @@ if exist "%USERPROFILE%\Desktop" (
 
 echo.
 echo ================================================================
-echo [+] ALL RELEASE ARTIFACTS (SETUP, PORTABLE ZIP) v6.0.4 READY!
+echo [+] ALL RELEASE ARTIFACTS (SETUP, PORTABLE ZIP) v6.0.5 READY!
 echo ================================================================

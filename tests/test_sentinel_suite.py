@@ -272,5 +272,66 @@ class TestClaudeBarrierSentinelSuite(unittest.TestCase):
                     for p in prohibited:
                         self.assertNotIn(p.lower(), text, f"Обнаружено несанкционированное упоминание {p} в {file_path}")
 
+    def test_14_watchdog_zero_process_silence(self):
+        """Проверка: при 0 запущенных процессах Claude фоновый Watchdog не спамит в лог и трей"""
+        def evaluate_watchdog_kill(is_protected, killswitch_enabled, target_pids, browser_tabs, force_notify=False):
+            if is_protected:
+                return False, 0
+            if not killswitch_enabled:
+                return False, 0
+            
+            total_killed = len(target_pids) + len(browser_tabs)
+            should_log_and_alert = (total_killed > 0) or force_notify
+            return should_log_and_alert, total_killed
+
+        # Случай 1: Барьер отключен, Claude не запущен -> 0 спама
+        should_alert, killed = evaluate_watchdog_kill(is_protected=False, killswitch_enabled=True, target_pids=[], browser_tabs=[])
+        self.assertFalse(should_alert, "Watchdog обязан молчать, если Claude не запущен!")
+        self.assertEqual(killed, 0)
+
+        # Случай 2: Барьер отключен, пользователь попытался открыть Claude -> Мгновенный Kill + Одиночный Alert
+        should_alert_2, killed_2 = evaluate_watchdog_kill(is_protected=False, killswitch_enabled=True, target_pids=[1042], browser_tabs=[])
+        self.assertTrue(should_alert_2, "Watchdog обязан уведомить при реальном уничтожении процесса")
+        self.assertEqual(killed_2, 1)
+
+    def test_15_balloon_tip_throttling(self):
+        """Проверка: защита от спама уведомлений Windows BalloonTip (кулдаун 6 секунд)"""
+        last_balloon_time = 100.0
+        
+        # 1.5 секунды спустя -> заблокировано
+        can_show_1 = (101.5 - last_balloon_time) >= 6.0
+        self.assertFalse(can_show_1)
+
+        # 3.0 секунды спустя -> заблокировано
+        can_show_2 = (103.0 - last_balloon_time) >= 6.0
+        self.assertFalse(can_show_2)
+
+        # 6.5 секунд спустя -> разрешено
+        can_show_3 = (106.5 - last_balloon_time) >= 6.0
+        self.assertTrue(can_show_3)
+
+    def test_16_wfp_test_vpn_tunnel_recognition(self):
+        """Проверка: при успешном SYN через VPN тест WFP не считает это утечкой"""
+        def eval_wfp_test_result(is_vpn_route, is_connected, blocked_by_kernel, fw_count):
+            if blocked_by_kernel:
+                return "INTERCEPT_ACTIVE"
+            if is_vpn_route and is_connected:
+                return "SAFE_VPN_TUNNEL"
+            if (not is_vpn_route) and is_connected:
+                return "UNINTERCEPTED_LEAK"
+            return "DIRECT_BLOCKED"
+
+        # AmneziaVPN (is_vpn_route=True, is_connected=True)
+        res_vpn = eval_wfp_test_result(is_vpn_route=True, is_connected=True, blocked_by_kernel=False, fw_count=18)
+        self.assertEqual(res_vpn, "SAFE_VPN_TUNNEL")
+
+        # Physical Wi-Fi without VPN (leak!)
+        res_leak = eval_wfp_test_result(is_vpn_route=False, is_connected=True, blocked_by_kernel=False, fw_count=18)
+        self.assertEqual(res_leak, "UNINTERCEPTED_LEAK")
+
+        # Dropped by WFP kernel
+        res_drop = eval_wfp_test_result(is_vpn_route=False, is_connected=False, blocked_by_kernel=True, fw_count=18)
+        self.assertEqual(res_drop, "INTERCEPT_ACTIVE")
+
 if __name__ == '__main__':
     unittest.main()

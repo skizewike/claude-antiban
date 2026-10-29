@@ -10,7 +10,7 @@
 **Windows Kernel Filtering Platform (WFP), Win32 Route Hook & Hybrid Sentinel Service for Anthropic Claude**
 
 <p align="center">
-  <a href="https://github.com/skizewike/claude-antiban/releases/latest"><img src="https://img.shields.io/badge/release-v6.0.4-0078D4?style=for-the-badge&logo=github&logoColor=white" alt="Release" /></a>
+  <a href="https://github.com/skizewike/claude-antiban/releases/latest"><img src="https://img.shields.io/badge/release-v6.0.5-0078D4?style=for-the-badge&logo=github&logoColor=white" alt="Release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22c55e?style=for-the-badge" alt="License" /></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011%20(x64)-0078D4?style=for-the-badge&logo=windows" alt="Platforms" />
   <a href="https://t.me/ClaudeBarrierBot"><img src="https://img.shields.io/badge/Telegram_Bot-@ClaudeBarrierBot-229ED9?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Bot" /></a>
@@ -94,8 +94,8 @@ ClaudeBarrier accomplishes a specific engineering goal: **100% fail-closed preve
 
 | Platform (OS) | Download Packages | Description |
 | :--- | :--- | :--- |
-| **Windows x64** <br> `Windows 10 / 11` | [![OfficialSetup x64](https://img.shields.io/badge/OfficialSetup-x64-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.4/ClaudeBarrier-Setup-x64.exe) | Complete installer with system registration, background service, and tray |
-| **Windows Portable** <br> `Windows 10 / 11` | [![Portable x64](https://img.shields.io/badge/Portable-x64-334155?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.4/ClaudeBarrier-Windows-Portable-x64.zip) | Portable standalone zip (runs from any folder, zero installation) |
+| **Windows x64** <br> `Windows 10 / 11` | [![OfficialSetup x64](https://img.shields.io/badge/OfficialSetup-x64-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.5/ClaudeBarrier-Setup-x64.exe) | Complete installer with system registration, background service, and tray |
+| **Windows Portable** <br> `Windows 10 / 11` | [![Portable x64](https://img.shields.io/badge/Portable-x64-334155?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/skizewike/claude-antiban/releases/download/v6.0.5/ClaudeBarrier-Windows-Portable-x64.zip) | Portable standalone zip (runs from any folder, zero installation) |
 
 ---
 
@@ -108,8 +108,12 @@ Activation requires a free personal license key in the format `CB-XXXX-XXXX-XXXX
 
 ---
 
-## 🚀 Key Features in Version 6.0.4
+## 🚀 Key Features in Version 6.0.5
 
+* **Zero-Spam Watchdog Engine:** Periodic background watchdog operates silently when no rogue Claude processes exist, eliminating tray balloon notifications and event log flooding.
+* **Modal Dialog Overlap Guard:** Prevents overlapping test dialogs during concurrent socket evaluations with proper parent window anchoring.
+* **VPN Route Recognition in WFP Checks:** Correctly identifies active WireGuard / AmneziaVPN tunnel routing as secured rather than false positive leaks.
+* **Notification Rate-Limiting:** Cooldown throttling on Windows system tray balloon tips for quiet background operation.
 * **Win32 Hook NotifyAddrChange:** Hardware-speed 0–5 ms response to any Windows routing table changes.
 * **Multi-Signal Triangulation:** 3 independent vector checks with 2-of-3 consensus rule and instant fail-closed kill on physical route switch.
 * **Two-Stage Process Killer:** `WM_CLOSE` to all windows -> 150 ms grace pause -> verified process termination for `Claude.exe`, `claude-desktop.exe`, `claude.exe` (CLI), and `node.exe`.
