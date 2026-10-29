@@ -15,7 +15,7 @@ tag = 'v6.0.4'
 
 # 1. Prepare Release description
 release_title = "ClaudeBarrier v6.0.4"
-release_body = """# ClaudeBarrier v6.0.4 — Official Release
+release_body = r"""# ClaudeBarrier v6.0.4 — Official Release
 
 **Официальный бот активации и поддержки:** [@ClaudeBarrierBot](https://t.me/ClaudeBarrierBot)  
 **Репозиторий:** [skizewike/claude-antiban](https://github.com/skizewike/claude-antiban)
